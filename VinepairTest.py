@@ -44,7 +44,7 @@ class PageWeights():
         t2i = dict(list((tindex,mat_ti) for mat_ti,tindex in enumerate(tindex_list)))
         for page in pindex_list:
             row = p2i[page]
-            for term_id in self.wp_pageterms[self.wp_pageterms['object_id']==80856]['term_taxonomy_id'].tolist():
+            for term_id in self.wp_pageterms[self.wp_pageterms['object_id']==page]['term_taxonomy_id'].tolist():
                 col = t2i[term_id]
                 index_mat[row,col] = True
         return index_mat

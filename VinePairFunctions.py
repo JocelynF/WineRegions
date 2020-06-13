@@ -17,16 +17,16 @@ def get_pagedata(type_of_data,pindex_list):
     #I assume the next part is just to get rid of dupes
     type_of_data = tuple(type_of_data)
 
-    # sql_sub = 'SELECT MAX(id) as mxid,date,pindex FROM pagedata WHERE `key` in "%s" AND pindex in (%s) GROUP BY date,pindex' % (type_of_data,sql_pindex_list)
-    # sql_in = 'WITH getmax AS (%s) SELECT pagedata.date,pagedata.pindex,pagedata.count, pagedata.`key` FROM pagedata JOIN getmax ON pagedata.id=getmax.mxid' % sql_sub
-    sql_sub = 'SELECT date, pindex, `count`, `key` FROM pagedata WHERE `key` in "%s" AND pindex in (%s)' % (type_of_data,sql_pindex_list) # DOES NOT ACCOUNT FOR DUPLICATES
+    sql_sub = 'SELECT MAX(id) as mxid,date,pindex FROM pagedata WHERE `key` in "%s" AND pindex in (%s) GROUP BY date,pindex' % (type_of_data,sql_pindex_list)
+    sql_in = 'WITH getmax AS (%s) SELECT pagedata.date,pagedata.pindex,pagedata.count, pagedata.`key` FROM pagedata JOIN getmax ON pagedata.id=getmax.mxid' % sql_sub
+    #sql_sub = 'SELECT date, pindex, `count`, `key` FROM pagedata WHERE `key` in "%s" AND pindex in (%s)' % (type_of_data,sql_pindex_list) # DOES NOT ACCOUNT FOR DUPLICATES
 
     all_data_df = pd.read_sql(sql_in, connection)
     return all_data_df
 
 def subtract_scroll_events(all_data_df):
     """
-    Need a dataframe of all the 
+    Need a dataframe of all the pindexes and keys we care about (scroll events and pageviews)
     """
     grouped = all_data_df.groupby(['pindex', 'date'])
     final_pv = {}

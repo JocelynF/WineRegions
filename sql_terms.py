@@ -21,11 +21,20 @@ country_term_sql = {
     'us':"= 'usa' or lower(term) = 'american wine' or lower(term) = 'america';"
 }
 
+#cabernet is only used as a tag in articles about cab sav
+#barolo incorporates nebbiolo
+#
+
+
 wine_term_sql = {
+    'barolo': "like '%%barolo' or lower(term) like 'nebbiolo'"
+    'cabernet franc': "= 'cabernet franc';"
+    'carmenere': "like 'carm_n_re'"
+    'cava': "= 'cava';"
     'rose' :"like 'ros_';",
     'malbec':"= 'malbec';",
     'moscato':"= 'moscato';",
-    'cab_sav':"= 'cabernet sauvignon';",
+    'cab_sav':"= 'cabernet sauvignon' or lower(term)='cabernet';",
     'pin_noir':"= 'pinot noir';",
     'merlot':"= 'merlot';",
     'riesling':"= 'riesling';",
