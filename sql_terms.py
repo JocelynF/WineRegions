@@ -23,21 +23,37 @@ country_term_sql = {
     'lebanon':"= 'lebanon';",
     'us':"= 'usa' or lower(term) = 'american wine' or lower(term) = 'america';"
 }
+
+
 #Inputs
-#wbs=True
-#post_tag = True
-#variety = True
-#review:goodfor = True
+wbs = True
+post_tag = True
+variety = True
+review_goodfor = True
+term_types = {'wbs_master_taxonomy_node_type': wbs, 'post_tag':post_tag, 'variety':variety,'review:goodfor':review_goodfor}
 
+#import wine file with term_taxonomy_ids
 tracked_wines = pd.read_csv('track_wines.csv', header = 0, index_col = 'Group Name')
+wine_names = tracked_wines.index.tolist()
 tracked_wines = tracked_wines.to_dict(orient='series')
-
-for col in ['wbs_master_taxonomy_node_type', 'post_tag', 'variety', 'review:goodfor']:
+#Convert values to lists
+for col in term_types.keys():
     tracked_wines = convert_csv_input(tracked_wines,col)
 del tracked_wines['Notes']
 
+#Create dictionary with keys = wine type and values as list of indexes we care about
+#This depends on the input of what kind of tags matter
+wine_tax_inds = {}
+for name in wine_names:
+    wine_tax_inds[name] = []
+    #Put in a check that at least one is true
+    for key, val in term_types.items():
+        if val == True:
+            wine_tax_inds[name].extend(tracked_wines[key][name])
+
 
 def convert_csv_input(df, column):
+    #convert inputs from strings or floats to lists of ints
     df[column]  = df[column].to_dict()
     for key, val in df[column].items():
         if isinstance(val, str):
@@ -50,6 +66,9 @@ def convert_csv_input(df, column):
             print("ERROR", key, val)
         df[column][key]=new_val
     return df
+
+
+
 
 
 
