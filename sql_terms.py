@@ -1,6 +1,9 @@
 import pandas as pd 
 
 
+files = pd.read_csv(filename = 'track_wines.csv', header = 0)
+
+
 country_term_sql = {
     'italy': "= 'italy';",
     'france':"like '%%france';",
@@ -20,34 +23,39 @@ country_term_sql = {
     'lebanon':"= 'lebanon';",
     'us':"= 'usa' or lower(term) = 'american wine' or lower(term) = 'america';"
 }
+#Inputs
+#wbs=True
+#post_tag = True
+#variety = True
+#review:goodfor = True
 
-#cabernet is only used as a tag in articles about cab sav
-#barolo incorporates nebbiolo
-#
+tracked_wines = pd.read_csv('track_wines.csv', header = 0, index_col = 'Group Name')
+tracked_wines = tracked_wines.to_dict(orient='series')
 
-
-wine_term_sql = {
-    'barolo': "like '%%barolo' or lower(term) like 'nebbiolo'"
-    'cabernet franc': "= 'cabernet franc';"
-    'carmenere': "like 'carm_n_re'"
-    'cava': "= 'cava';"
-    'rose' :"like 'ros_';",
-    'malbec':"= 'malbec';",
-    'moscato':"= 'moscato';",
-    'cab_sav':"= 'cabernet sauvignon' or lower(term)='cabernet';",
-    'pin_noir':"= 'pinot noir';",
-    'merlot':"= 'merlot';",
-    'riesling':"= 'riesling';",
-    'sav_blanc':"= 'sauvignon blanc';",
-    'red_blend':"= 'red blend';",
-    'chard':"= 'chardonnay';",
-    'syrah_shiraz':"like '%%syrah%%' or lower(term) like '%%shiraz%%';",
-    'pin_gri':"like '%%pinot grigio%%' or lower(term) = '%%pinot gris%%';"
- }
+for col in ['wbs_master_taxonomy_node_type', 'post_tag', 'variety', 'review:goodfor']:
+    tracked_wines = convert_csv_input(tracked_wines,col)
+del tracked_wines['Notes']
 
 
-  def get_tindexes(sql_query_end):
-    tindexes = pd.read_sql('select tindex from tindex where lower(term) '+sql_query_end, dbconnect)['tindex']
+def convert_csv_input(df, column):
+    df[column]  = df[column].to_dict()
+    for key, val in df[column].items():
+        if isinstance(val, str):
+            new_val = [int(i) for i in df[column][key].split(';')]
+        elif np.isnan(val):
+            new_val = []
+        elif isinstance(val, float):
+            new_val = [int(val)]
+        else:
+            print("ERROR", key, val)
+        df[column][key]=new_val
+    return df
+
+
+
+
+def get_tindexes(sql_query_end):
+    tindexes = pd.read_csv('')['tindex']
     return tindexes
 
 def find_pindexes(tindexes, print_counts = False):
