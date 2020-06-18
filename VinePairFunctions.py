@@ -59,10 +59,8 @@ def get_pageviews(connection, pindex_list, type_of_pageviews = "pageviews",subtr
     date_list = [date_min + datetime.timedelta(days=x) for x in range((date_max-date_min).days + 1)]
 
     #these are just dictionaries to make indexing easier later
-    col2date = dict(list((array_di,date) for array_di,date in enumerate(date_list)))
     date2col = dict(list((date,array_di) for array_di,date in enumerate(date_list)))
     #This is the same as the dictionary outside of the function, maybe write a class
-    row2page = dict(list((array_pi,pindex) for array_pi,pindex in enumerate(pindex_list))) 
     page2row = dict(list((pindex,array_pi) for array_pi,pindex in enumerate(pindex_list)))
 
     if subtract_scroll == True:
@@ -74,7 +72,7 @@ def get_pageviews(connection, pindex_list, type_of_pageviews = "pageviews",subtr
         #merge the scroll events into the pageviews dataframe
         pageviews_df = pageviews_df.merge(scroll_events_df, on = ['pindex','date'], how = 'left')
         #subtract the scroll events from the page views assuming everything is 0 if a scroll_count is nan
-        pageviews_df['net_views'] = pageviews_df['pageviews_counts'].sub(pageviews_df['scroll_counts'], fill_value=0)
+        pageviews_df['net_views'] = pageviews_df['pageviews_counts'].subtract(pageviews_df['scroll_counts'], fill_value=0)
     else:
         #net views are the raw pageviews if we don't subtract scroll events
         pageviews_df['net_views'] = pageviews_df['pageviews'].copy()
@@ -89,6 +87,63 @@ def get_pageviews(connection, pindex_list, type_of_pageviews = "pageviews",subtr
         columns = group['date'].apply(lambda x: date2col[x]).tolist()
         counts = group['net_views'].tolist()
         netviews_array[row,columns] = counts
-    return netviews_array, date_list
+    return netviews_array, date_list 
 
 #def get_searchterm_counts(search_phrases, search_type):
+
+
+def page_outliers(array_to_flag, cutoff = 0.5, sigcut=10,hardcut=5000):
+    """
+    Test each individual series in each aggregation group agains the group total
+    check for values above two cutoffs: 1) more than (cutoff) of daily 
+    agg total, 2) more than (sigcut) stddev above timeseries values.
+
+    Separate function to check outliers with respect to daily values
+    """
+    print("Performing Spike Detection")
+    #outlier_subs = np.zeros(array_to_flag.shape)
+    # log = NullLog()
+    # error_handler = np.seterrcall(log)
+    # np.seterr(all='log')
+    n_days = array_to_flag.shape[1]
+    row_sum = np.nansum(array_to_flag, axis = 1)
+    row_max = np.nanmax(array_to_flag, axis = 1)
+    row_sum_top = np.subtract(row_sum,row_max) #subtract the max of each row from the sum of each row
+    row_max_2 = row_max*row_max #square the max of each row
+    array_2 = array_to_flag*array_to_flag #square every element
+    row_sum_2 = np.nansum(array_2, axis = 1) #sum the square of each element in a row
+    row_sum2_max2 = np.subtract(row_sum_2, row_max_2) #subtract square of max from sum of squares of each row
+    row_means = row_sum_top/n_days #total minus max value divided by all days
+    row_means_2 = row_means*row_means #mean squared of each row
+    row_var =  np.subtract(row_sum2_max2/n_days, row_means_2)
+    row_std = np.sqrt(row_var)
+    row_sd_max = sigcut*row_std+row_means
+    horiz_spike = np.greater(array_to_flag, row_sd_max[:,None]) #do I need the ,None?
+    hard_cut = array_to_flag > hardcut
+    page_spike = np.logical_and(horiz_spike,hard_cut)
+    spike_index = np.nonzero(page_spike)
+    si_pairs = zip(list(spike_index[0]),list(spike_index[1]))
+    daily_tots = np.nansum(array_to_flag, axis = 0)
+    daily_max = daily_tots*cutoff
+    print("   flagged %i out of %i points as outliers" % (len(spike_index[0]),array_to_flag.shape[1]*array_to_flag.shape[0]))
+    for ri,ci in si_pairs:
+        array_to_flag[ri,ci] = daily_max[ci]
+    return page_spike, array_to_flag
+
+    # vert_spikes = {}
+    # for group, rows in group_rows.items():
+    #     dict([sub_row, row for sub_row, row in enumerate()])
+    #     daily_tots = np.nansum(array_to_flag[rows,:], axis = 0)
+    #     daily_max = daily_tots*cutoff
+    #     hard_cut = array_to_flat[rows,:] > hardcut
+    #     vert_spike = np.greater(array_to_flag[rows,:],daily_max[:]) #do I need the None?
+    #     group_spike = np.logical_and(horiz_spike,np.logical_and(vert_spike,hard_cut))
+    #     spike_index = np.nonzero(group_spike)
+    #     si_pairs = []
+    #     for ind, val in enumerate(spike_index[0]):
+    #         if val in rows:
+    #             row = val
+    #             col = spike_index[1][ind]
+    #             outlier_subs[(row, col)] = daily_max[col]
+    # print("   flagged %i out of %i points as outliers" % (np.count_nonzero(outlier_subs),outlier_subs.shape[0]*outlier_subs.shape[1]))
+    # return out

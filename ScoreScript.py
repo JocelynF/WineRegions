@@ -5,11 +5,13 @@ import sqlalchemy as db
 import time
 import VinePairFunctions as vf
 import logging
+import json
+import pickel
 import os
 ## ------------START USER INPUT -------------------------------
 
 #Where to log info
-os.remove("RegionalWines.log")
+#os.remove("RegionalWines.log")
 logging.basicConfig(filename='RegionalWines.log',level=logging.DEBUG)
 
 #THESE NEED TO BE INCLUDED IN THE TRACKED_WINES.CSV FILE
@@ -75,7 +77,7 @@ region_appellation = True
 region_post_tag = True
 
 #----------------------END USER INPUT------------------------------------
-
+start = time.time()
 
 sql_connect =  'mysql+pymysql://root:harvey@127.0.0.1:3306/wordpress'
 engine = db.create_engine(sql_connect)#, echo = True)
@@ -96,7 +98,7 @@ wp_pageterms = wp_pageterms.merge(post_info, on = 'object_id', how = 'outer')
 #print(wp_pageterms.shape)
 wp_pageterms = wp_pageterms[wp_pageterms['post_slug']!='']
 #print(wp_pageterms.shape)
-
+print('Mark 1: ', time.time()-start)
 ##------------------IMPORTING ALL REGIONS,THEIR PAGES, AND THEIR TAGS-----------------------------------------------
 
 all_tracked_regions = track_countries.extend(track_regions)
@@ -137,6 +139,8 @@ for region in region_names:
     region_pages[region] = set(wp_pageterms[wp_pageterms['term_taxonomy_id'].isin(region_group_tdict[region])&(wp_pageterms['object_id'].notnull())]['object_id'])
 all_region_pages = sorted(set([int(value) for values in region_pages.values() for value in values]))
 
+print('Mark 2: ', time.time()-start)
+
 ##------------------IMPORTING ALL WINES ,THEIR PAGES, AND THEIR TAGS-------------------------------------------------------
 
 
@@ -169,9 +173,12 @@ for wine in wine_names:
     wine_pages[wine] = set(wp_pageterms[wp_pageterms['term_taxonomy_id'].isin(wine_group_tdict[wine])&(wp_pageterms['object_id'].notnull())]['object_id']) #object id is the page idea
 all_wine_pages = sorted(set([int(value) for values in wine_pages.values() for value in values]))
 
+
 for wine in wine_pages:
     l_pages = len(wine_pages[wine])
     logging.info(f"Number of {wine} pages: {l_pages}")
+
+print('Mark 3: ', time.time()-start)
 
 #--------------------CREATE 2D ARRAY TO MARK WHICH WINE GROUPS HAVE WHICH PAGES----------------------------------
 
@@ -190,50 +197,82 @@ for wine, pages in wine_pages.items():
     wine_type_mat[page_rows, col] = True
 
 
+print('Mark 4: ', time.time()-start)
 
 #----------------WEIGHT PAGES BY THE NUMBER OF WINE TYPES IN THE TAGS OF A PAGE---------------------------------
 
 #page weight just evenly divides pages by wines in them then divides and sqaures
-#Ex: page tags chardonnay, pinot noir, and cab franc - would be weighted 1/3 for each of these wines
+#Ex: if a page tags chardonnay, pinot noir, and cab franc - would be weighted 1/3 for each of these wines
 row_vals = np.nansum(wine_type_mat, axis = 1)    
 page_weights_wine = (wine_type_mat.T/row_vals).T #could square this to skew weighting better?
 #pageweights are 0 if no value exists
 
+print('Mark 5: ', time.time()-start)
 
-#------------------AGGREGATE PAGES BY WINE TYPE and PAGE WEIGHTS FOR NET VIEWS----------------------------------------------
+#------------------AGGREGATE PAGES BY WINE TYPE and PAGE WEIGHTS FOR NET VIEWS AND FILTER OUTLIERS ----------------------------------------------
 
-wine_pageviews_df, date_list = vf.get_pageviews(vinepair_connect, all_wine_pages, 'pageviews', True)
-all_wine_weighted_netviews = np.zeros((len(date_list),len(wine_names)))
+wine_pageviews_array, date_list = vf.get_pageviews(vinepair_connect, all_wine_pages, 'pageviews', True) #not aggregated
+page_spikes, filtered_pageviews = vf.page_outliers(wine_pageviews_array, cutoff = 0.5, sigcut=5, hardcut=5000) #only filtered in the horizontal direction, not by group
+
+all_wine_weighted_netviews_unfiltered = np.zeros((len(date_list),len(wine_names)))
+all_wine_weighted_netviews_filtered = np.zeros((len(date_list),len(wine_names)))
 for col in range(page_weights_wine.shape[1]):
     #column is the wine group (e.g. chardonnay, pinot noir), rows are the dates and values are the net pageviews
-    all_wine_weighted_netviews[:, col] = np.nansum((wine_pageviews_df.T*page_weights_wine[:,col]).T, axis = 0).T
+    all_wine_weighted_netviews_unfiltered[:, col] = np.nansum((wine_pageviews_array.T*page_weights_wine[:,col]).T, axis = 0).T #aggregated
+    all_wine_weighted_netviews_filtered[:, col] = np.nansum((filtered_pageviews.T*page_weights_wine[:,col]).T, axis = 0).T #aggregated
 
-pd.DataFrame(wine_pageviews_df.T, columns = all_wine_pages, index = date_list).to_csv('AllPageViewsRaw.csv')
 
+pd.DataFrame(wine_pageviews_array.T, columns = all_wine_pages, index = date_list).to_csv('AllPageViewsRaw_Unfiltered.csv')
+pd.DataFrame(filtered_pageviews.T, columns = all_wine_pages, index = date_list).to_csv('AllPageViewsRaw_Filtered.csv')
+
+wine_column_names = [row2wine[i] for i in range(all_wine_weighted_netviews_unfiltered.shape[1])]
+pd.DataFrame(all_wine_weighted_netviews_unfiltered, index = date_list, columns = wine_column_names).to_csv('WeightedWineViewsUnfiltered.csv') 
+pd.DataFrame(all_wine_weighted_netviews_filtered, index = date_list, columns = wine_column_names).to_csv('WeightedWineViewsFiltered.csv') 
+
+print('Mark 6: ', time.time()-start)
 
 #--------------CREATE DICTIONARY OF DICTIONARIES OF WEIGHTED PAGEVIEWS OF WINE BY GROUP AND REGION---------------- 
 #probably better to make this a dictionary of matricies to make it easier to incorporate search terms
 logging.info("\n NUMBER OF WINES FOR EACH REGION")
-subgroup_netviews = {}
+subgroup_netviews_unfiltered = {}
+subgroup_netviews_filtered = {}
+page_creation_dates = {}
 for wine_group, w_pages in wine_pages.items():
-    for region_group, r_pages in region_pages.items():
-        subgroup_netviews[wine_group] = {}
-        region_weighted_netviews = np.zeros((len(date_list),len(all_region_pages)))
-        page_weights = page_weights_wine.copy()
-        page_overlaps= w_pages & r_pages #intersection of the two sets
-        if wine_group in track_wines:
+    if wine_group in track_wines:
+        wine_col = wine2row[wine_group]
+        subgroup_netviews_unfiltered[wine_group] = {}
+        subgroup_netviews_filtered[wine_group] = {}
+        page_creation_dates[wine_group]={}
+        for region_group, r_pages in region_pages.items():
+            region_weighted_netviews_unfiltered = np.zeros((len(date_list),len(all_region_pages)))
+            region_weighted_netviews_filtered = np.zeros((len(date_list),len(all_region_pages)))
+            page_weights = page_weights_wine.copy()
+            page_overlaps= w_pages & r_pages #intersection of the two sets
+            creation_dates = post_info[post_info['object_id'].isin(page_overlaps)]['post_date']
+            page_creation_dates[wine_group][region_group] = creation_dates
             logging.info(f"Number of {region_group} & {wine_group} pages: {len(page_overlaps)}")
-        # if len(page_overlaps)==0:
-        #     print(f'No pages for {region_group} and {wine_group}')
-        page_rows = [page2row[page] for page in page_overlaps]
-        mask=np.zeros((page_weights.shape[0],page_weights.shape[1]), dtype=np.bool_)
-        mask[page_rows,:] = True
-        page_weights = page_weights*mask #only want rows where the pages overlap
-        region_weight_netviews = np.nansum((wine_pageviews_df.T*page_weights[:,col]).T, axis = 0)
-        subgroup_netviews[wine_group][region_group] = region_weight_netviews
+            page_rows = [page2row[page] for page in page_overlaps]
+            mask=np.zeros((page_weights.shape[0],page_weights.shape[1]), dtype=np.bool_)
+            mask[page_rows,:] = True
+            page_weights = page_weights*mask #only want rows where the pages overlap
+            region_weight_netviews_unfiltered = np.nansum((wine_pageviews_array.T*page_weights[:,wine_col]).T, axis = 0)
+            region_weight_netviews_filtered = np.nansum((filtered_pageviews.T*page_weights[:,wine_col]).T, axis = 0)
+            subgroup_netviews_unfiltered[wine_group][region_group] = region_weight_netviews_unfiltered
+            subgroup_netviews_filtered[wine_group][region_group] = region_weight_netviews_filtered
+    else:
+        pass
 
-wine_column_names = [row2wine[i] for i in range(all_wine_weighted_netviews.shape[1])]
-pd.DataFrame(all_wine_weighted_netviews, index = date_list, columns = wine_column_names).to_csv('WeightedWineViewsTest.csv') 
 
-with open('RegionalWineViews.json', 'w') as json_file:
-  json.dump(subgroup_netviews, json_file)
+print('Mark 7: ', time.time()-start)
+
+with open("frenchpinot.pkl", "wb") as fp:  
+    pickle.dump(page_creation_dates['PINOT NOIR']['FRANCE'], fp)
+
+pinot_unfilt = pd.DataFrame.from_dict(subgroup_netviews_unfiltered['PINOT NOIR'],orient = 'columns')
+pinot_unfilt.loc[:,'DATE']=date_list  
+pinot_unfilt.to_csv('PinotUnfilt.csv')
+
+
+pinot_filt = pd.DataFrame.from_dict(subgroup_netviews_filtered['PINOT NOIR'],orient = 'columns')
+pinot_filt.loc[:,'DATE']=date_list  
+pinot_filt.to_csv('PinotFilt.csv')
