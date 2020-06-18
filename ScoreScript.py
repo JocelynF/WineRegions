@@ -6,7 +6,7 @@ import time
 import VinePairFunctions as vf
 import logging
 import json
-import pickel
+import pickle
 import os
 ## ------------START USER INPUT -------------------------------
 
@@ -16,16 +16,17 @@ logging.basicConfig(filename='RegionalWines.log',level=logging.DEBUG)
 
 #THESE NEED TO BE INCLUDED IN THE TRACKED_WINES.CSV FILE
 track_wines = ['CABERNET SAUVIGNON',
-                'PINOT NOIR',
+                'CHARDONNAY',
                 'MALBEC',
                 'MERLOT',
                 'MOSCATO',
                 'PINOT GRIGIO/PINOT GRIS',
+                'PINOT NOIR'
                 'RED BLEND',
-                'RIELSING',
+                'RIESLING',
                 'ROSE',
                 'SAUVIGNON BLANC',
-                'SYRAH/SHIRAZ']
+                'SHIRAZ/SYRAH']
 
 #THESE NEED TO BE INCLUDED IN THE TRACKED_REGIONS.CSV FILE
 track_countries = ['ARGENTINA',
@@ -190,6 +191,9 @@ row2page = dict(list((mat_pi,pindex) for mat_pi,pindex in enumerate(all_wine_pag
 page2row = dict(list((pindex,mat_pi) for mat_pi,pindex in enumerate(all_wine_pages)))
 row2wine = dict(list((mat_wi,wine_ind) for mat_wi,wine_ind in enumerate(wine_names)))
 wine2row = dict(list((wine_ind,mat_wi) for mat_wi,wine_ind in enumerate(wine_names)))
+row2region = dict(list((mat_ri,region_ind) for mat_ri,region_ind in enumerate(region_names)))
+region2row = dict(list((region_ind,mat_ri) for mat_ri,region_ind in enumerate(region_names)))
+
 for wine, pages in wine_pages.items():
     col = wine2row[wine]
     page_rows= [page2row[page] for page in pages]
@@ -238,14 +242,15 @@ subgroup_netviews_unfiltered = {}
 subgroup_netviews_filtered = {}
 page_creation_dates = {}
 for wine_group, w_pages in wine_pages.items():
+    #print(wine_group)
     if wine_group in track_wines:
+        #print(wine_group)
         wine_col = wine2row[wine_group]
-        subgroup_netviews_unfiltered[wine_group] = {}
-        subgroup_netviews_filtered[wine_group] = {}
+        subgroup_netviews_unfiltered[wine_group] = np.full((len(date_list),len(region_pages.keys())), np.nan)
+        subgroup_netviews_filtered[wine_group] = np.full((len(date_list),len(region_pages.keys())), np.nan)
         page_creation_dates[wine_group]={}
         for region_group, r_pages in region_pages.items():
-            region_weighted_netviews_unfiltered = np.zeros((len(date_list),len(all_region_pages)))
-            region_weighted_netviews_filtered = np.zeros((len(date_list),len(all_region_pages)))
+            region_col = region2row[region_group]
             page_weights = page_weights_wine.copy()
             page_overlaps= w_pages & r_pages #intersection of the two sets
             creation_dates = post_info[post_info['object_id'].isin(page_overlaps)]['post_date']
@@ -257,10 +262,8 @@ for wine_group, w_pages in wine_pages.items():
             page_weights = page_weights*mask #only want rows where the pages overlap
             region_weight_netviews_unfiltered = np.nansum((wine_pageviews_array.T*page_weights[:,wine_col]).T, axis = 0)
             region_weight_netviews_filtered = np.nansum((filtered_pageviews.T*page_weights[:,wine_col]).T, axis = 0)
-            subgroup_netviews_unfiltered[wine_group][region_group] = region_weight_netviews_unfiltered
-            subgroup_netviews_filtered[wine_group][region_group] = region_weight_netviews_filtered
-    else:
-        pass
+            subgroup_netviews_unfiltered[wine_group][:, region_col] = region_weight_netviews_unfiltered
+            subgroup_netviews_filtered[wine_group][:, region_col] = region_weight_netviews_filtered
 
 
 print('Mark 7: ', time.time()-start)
@@ -268,11 +271,15 @@ print('Mark 7: ', time.time()-start)
 with open("frenchpinot.pkl", "wb") as fp:  
     pickle.dump(page_creation_dates['PINOT NOIR']['FRANCE'], fp)
 
-pinot_unfilt = pd.DataFrame.from_dict(subgroup_netviews_unfiltered['PINOT NOIR'],orient = 'columns')
-pinot_unfilt.loc[:,'DATE']=date_list  
-pinot_unfilt.to_csv('PinotUnfilt.csv')
+
+for wine in track_wines:
+    unfilt = pd.DataFrame.from_dict(subgroup_netviews_unfiltered[wine],orient = 'columns')
+    unfilt.loc[:,'DATE']=date_list  
+    w = wine.replace(' ', '').replace('/','')
+    unfilt.to_csv(f'{w}_Unfilt.csv')
 
 
-pinot_filt = pd.DataFrame.from_dict(subgroup_netviews_filtered['PINOT NOIR'],orient = 'columns')
-pinot_filt.loc[:,'DATE']=date_list  
-pinot_filt.to_csv('PinotFilt.csv')
+
+# pinot_filt = pd.DataFrame.from_dict(subgroup_netviews_filtered['PINOT NOIR'],orient = 'columns')
+# pinot_filt.loc[:,'DATE']=date_list  
+# pinot_filt.to_csv('PinotFilt.csv')
