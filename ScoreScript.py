@@ -6,6 +6,8 @@ import time
 import VinePairFunctions as vf
 import logging
 import json
+import itertools
+import csv
 import pickle
 import os
 ## ------------START USER INPUT -------------------------------
@@ -21,7 +23,7 @@ track_wines = ['CABERNET SAUVIGNON',
                 'MERLOT',
                 'MOSCATO',
                 'PINOT GRIGIO/PINOT GRIS',
-                'PINOT NOIR'
+                'PINOT NOIR',
                 'RED BLEND',
                 'RIESLING',
                 'ROSE',
@@ -140,6 +142,13 @@ for region in region_names:
     region_pages[region] = set(wp_pageterms[wp_pageterms['term_taxonomy_id'].isin(region_group_tdict[region])&(wp_pageterms['object_id'].notnull())]['object_id'])
 all_region_pages = sorted(set([int(value) for values in region_pages.values() for value in values]))
 
+
+
+with open("RegionalPages.csv", "w") as outfile:
+    writer = csv.writer(outfile)
+    writer.writerow(region_pages.keys())
+    writer.writerows(itertools.zip_longest(*region_pages.values()))
+
 print('Mark 2: ', time.time()-start)
 
 ##------------------IMPORTING ALL WINES ,THEIR PAGES, AND THEIR TAGS-------------------------------------------------------
@@ -174,6 +183,10 @@ for wine in wine_names:
     wine_pages[wine] = set(wp_pageterms[wp_pageterms['term_taxonomy_id'].isin(wine_group_tdict[wine])&(wp_pageterms['object_id'].notnull())]['object_id']) #object id is the page idea
 all_wine_pages = sorted(set([int(value) for values in wine_pages.values() for value in values]))
 
+with open("WinePages.csv", "w") as outfile:
+    writer = csv.writer(outfile)
+    writer.writerow(wine_pages.keys())
+    writer.writerows(itertools.zip_longest(*wine_pages.values()))
 
 for wine in wine_pages:
     l_pages = len(wine_pages[wine])
@@ -241,6 +254,7 @@ logging.info("\n NUMBER OF WINES FOR EACH REGION")
 subgroup_netviews_unfiltered = {}
 subgroup_netviews_filtered = {}
 page_creation_dates = {}
+num_pages_subgroup= {}
 for wine_group, w_pages in wine_pages.items():
     #print(wine_group)
     if wine_group in track_wines:
@@ -248,12 +262,14 @@ for wine_group, w_pages in wine_pages.items():
         wine_col = wine2row[wine_group]
         subgroup_netviews_unfiltered[wine_group] = np.full((len(date_list),len(region_pages.keys())), np.nan)
         subgroup_netviews_filtered[wine_group] = np.full((len(date_list),len(region_pages.keys())), np.nan)
-        page_creation_dates[wine_group]={}
+        page_creation_dates[wine_group]= {}
+        num_pages_subgroup[wine_group] = np.zeros(len(region_pages.keys()))
         for region_group, r_pages in region_pages.items():
             region_col = region2row[region_group]
             page_weights = page_weights_wine.copy()
             page_overlaps= w_pages & r_pages #intersection of the two sets
             creation_dates = post_info[post_info['object_id'].isin(page_overlaps)]['post_date']
+            num_pages_subgroup[wine_group][region_col] = len(page_overlaps)
             page_creation_dates[wine_group][region_group] = creation_dates
             logging.info(f"Number of {region_group} & {wine_group} pages: {len(page_overlaps)}")
             page_rows = [page2row[page] for page in page_overlaps]
@@ -268,14 +284,16 @@ for wine_group, w_pages in wine_pages.items():
 
 print('Mark 7: ', time.time()-start)
 
-with open("frenchpinot.pkl", "wb") as fp:  
-    pickle.dump(page_creation_dates['PINOT NOIR']['FRANCE'], fp)
+# with open("frenchpinot.pkl", "wb") as fp:  
+#     pickle.dump(page_creation_dates['PINOT NOIR']['FRANCE'], fp)
+
 
 
 for wine in track_wines:
     unfilt = pd.DataFrame.from_dict(subgroup_netviews_unfiltered[wine],orient = 'columns')
     unfilt.loc[:,'DATE']=date_list  
     w = wine.replace(' ', '').replace('/','')
+
     unfilt.to_csv(f'{w}_Unfilt.csv')
 
 
