@@ -6,6 +6,38 @@ import datetime
 
 
 
+def get_page_indexes(all_categories_filename, term_types, wp_pageterms):
+    #import file with groups and term_taxonomy_ids in columns
+    all_categories = pd.read_csv(all_categories_filename, header = 0, index_col = 'Group Name')
+    names = sorted(all_categories.index.tolist())
+    all_categories = all_categories.to_dict(orient='series')
+    #Convert values to lists
+    for col in term_types.keys():
+        all_categories = convert_csv_input(all_categories,col)
+    #Create dictionary with keys = group type and values as list of indexes we care about
+    #This depends on the input of what kind of tags matter
+    group_tdict = {}
+    for name in names:
+        group_tdict[name] = []
+        #Put in a check that at least one is true
+        for key, val in term_types.items():
+            if val == True:
+                if key == 'appellation':
+                    app_key = all_categories[key][name]              
+                    while len(app_key)!=0:
+                        group_tdict[name].extend(app_key)
+                        app_key = list(set(wp_pageterms[wp_pageterms['parent'].isin(app_key)]['term_taxonomy_id']))
+                else:
+                    group_tdict[name].extend(all_categories[key][name])
+    tindex_dict = invert_dict(group_tdict) #map indexes to the group
+    all_category_tindexes = set([int(val) for values in group_tdict.values() for val in values])
+    category_pages_dict = {}
+    for name in names:
+        category_pages_dict[name] = set(wp_pageterms[wp_pageterms['term_taxonomy_id'].isin(group_tdict[name])&(wp_pageterms['object_id'].notnull())]['object_id']) #object id is the page idea
+    all_category_pages = sorted(set([int(value) for values in category_pages_dict.values() for value in values]))
+    return category_pages_dict, all_category_pages
+
+
 def convert_csv_input(df, column):
     #convert inputs from strings or floats to lists of ints
     df[column]  = df[column].to_dict()
@@ -40,7 +72,7 @@ def invert_dict(d):
                 invers[item].append(key)
     return inverse
 
-def get_pageviews(connection, pindex_list, type_of_pageviews = "pageviews",subtract_scroll=True):
+def get_pageviews(connection, pindex_list, row2page, page2row, type_of_pageviews = "pageviews",subtract_scroll=True):
     """
     type of pageviews: pageviews or unique_pageviews
     pindex_list: list of pages
@@ -60,8 +92,6 @@ def get_pageviews(connection, pindex_list, type_of_pageviews = "pageviews",subtr
 
     #these are just dictionaries to make indexing easier later
     date2col = dict(list((date,array_di) for array_di,date in enumerate(date_list)))
-    #This is the same as the dictionary outside of the function, maybe write a class
-    page2row = dict(list((pindex,array_pi) for array_pi,pindex in enumerate(pindex_list)))
 
     if subtract_scroll == True:
         #get all the scrollevents for the relevent pages
@@ -88,9 +118,6 @@ def get_pageviews(connection, pindex_list, type_of_pageviews = "pageviews",subtr
         counts = group['net_views'].tolist()
         netviews_array[row,columns] = counts
     return netviews_array, date_list 
-
-#def get_searchterm_counts(search_phrases, search_type):
-
 
 def page_outliers(array_to_flag, cutoff = 0.5, sigcut=10,hardcut=5000):
     """
