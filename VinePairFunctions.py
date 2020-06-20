@@ -8,32 +8,44 @@ import datetime
 
 def get_page_indexes(all_categories_filename, term_types, wp_pageterms):
     #import file with groups and term_taxonomy_ids in columns
-    all_categories = pd.read_csv(all_categories_filename, header = 0, index_col = 'Group Name')
-    names = sorted(all_categories.index.tolist())
-    all_categories = all_categories.to_dict(orient='series')
+    all_categories1 = pd.read_csv(all_categories_filename, header = 0, index_col = 'Group Name')
+    all_categories2 = all_categories1.to_dict(orient='series')
     #Convert values to lists
     for col in term_types.keys():
-        all_categories = convert_csv_input(all_categories,col)
+        all_categories3 = convert_csv_input(all_categories2,col)
     #Create dictionary with keys = group type and values as list of indexes we care about
     #This depends on the input of what kind of tags matter
+        
+    if 'level' in all_categories3.keys():
+        max_level = all_categories3['level'].max()  
+        names = all_categories3['level'].sort_values(ascending=False).index.tolist()
+    else:
+        names = sorted(all_categories1.index.tolist()) 
     group_tdict = {}
-    for name in names:
-        group_tdict[name] = []
+
+    for i in range(len(names)):
+        group_tdict[names[i]] = []
         #Put in a check that at least one is true
         for key, val in term_types.items():
             if val == True:
                 if key == 'appellation':
-                    app_key = all_categories[key][name]              
+                    app_key = all_categories3[key][names[i]]              
                     while len(app_key)!=0:
-                        group_tdict[name].extend(app_key)
+                        group_tdict[names[i]].extend(app_key)
                         app_key = list(set(wp_pageterms[wp_pageterms['parent'].isin(app_key)]['term_taxonomy_id']))
                 else:
-                    group_tdict[name].extend(all_categories[key][name])
-    tindex_dict = invert_dict(group_tdict) #map indexes to the group
+                    group_tdict[names[i]].extend(all_categories3[key][names[i]])
+                    
+        if ('level' in all_categories3.keys()):
+            if (all_categories3['level'][names[i]]<max_level):
+                children = all_categories1[all_categories1['parent']==names[i]].index.tolist()
+                for child in children:
+                    group_tdict[names[i]].extend(all_categories3[key][child])
+    #tindex_dict = invert_dict(group_tdict) #map indexes to the group
     all_category_tindexes = set([int(val) for values in group_tdict.values() for val in values])
     category_pages_dict = {}
     for name in names:
-        category_pages_dict[name] = set(wp_pageterms[wp_pageterms['term_taxonomy_id'].isin(group_tdict[name])&(wp_pageterms['object_id'].notnull())]['object_id']) #object id is the page idea
+        category_pages_dict[name] = set(wp_pageterms[wp_pageterms['term_taxonomy_id'].isin(group_tdict[name])&(wp_pageterms['object_id'].notnull())]['object_id']) #object id is the pages
     all_category_pages = sorted(set([int(value) for values in category_pages_dict.values() for value in values]))
     return category_pages_dict, all_category_pages
 

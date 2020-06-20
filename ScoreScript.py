@@ -69,6 +69,10 @@ track_regions = ['BEAUJOLAIS',
                 'SONOMA',
                 'NAPA']
 
+#WEIGHTING_SCHEME (INV OR SQUARE OR NONE) DETERMINES WHETHER A PAGE IS 
+#WEIGHTED BY THE INVERSE NUMBER OF TRACKED TAGS OR THE SQUARE OF THE INVERSE
+# OR NOT WEIGHTED AT ALL
+WEIGHT_SCHEME = 'INV' #OR 'SQUARE' OR 'NONE'
 
 #WHAT KIND OF TAXONOMY WOULD YOU LIKE TO INCLUDE
 wine_wbs = True
@@ -78,6 +82,7 @@ wine_review_goodfor = True
 
 region_appellation = True 
 region_post_tag = True
+region_wbs = True
 
 #----------------------END USER INPUT------------------------------------
 start = time.time()
@@ -96,47 +101,20 @@ wp_term_relat = pd.read_sql("select * from wp_term_relationships;", wordpress_co
 post_info = pd.read_sql("select ID, post_date, post_name from wp_posts;", wordpress_connect)
 post_info = post_info.rename(columns={'ID': 'object_id', 'post_name': 'post_slug'})
 wp = wp_tax.merge(wp_terms, on = 'term_id', how = 'outer')  #term_taxonomy_id term_id taxonomy description parent count name slug term_group
+#Long Island is listed as being a parent but should be under New York
+wp.loc[wp['name']=='Long Island','parent'] = 4331
+
 wp_pageterms = wp_term_relat.merge(wp, on = 'term_taxonomy_id', how = 'outer')
 wp_pageterms = wp_pageterms.merge(post_info, on = 'object_id', how = 'outer')
+
 #print(wp_pageterms.shape)
 wp_pageterms = wp_pageterms[wp_pageterms['post_slug']!='']
 #print(wp_pageterms.shape)
 print('Mark 1: ', time.time()-start)
 ##------------------IMPORTING ALL REGIONS,THEIR PAGES, AND THEIR TAGS-----------------------------------------------
 
-all_tracked_regions = track_countries.extend(track_regions)
+#all_tracked_regions = track_countries.extend(track_regions)
 region_term_types = {'appellation': region_appellation, 'post_tag':region_post_tag}
-#region_names = sorted(import_regions.index.tolist())
-#import_regions = import_regions.to_dict(orient='series')
-# #Convert values to lists
-# for col in region_term_types.keys():
-#     tracked_regions = vf.convert_csv_input(import_regions,col)
-# #Create dictionary with keys = country and values as list of indexes we care about
-# #This depends on the input of what kind of tags matter
-# region_group_tdict = {}
-# for name in region_names:
-#     region_group_tdict[name] = []
-#     ## NOTE: Put in a check that at least one is true
-#     for key, val in region_term_types.items():
-#         #key is the tag type, value is true or false
-#         if val == True:
-#             if key == 'appellation':
-#                 app_key = tracked_regions[key][name]              
-#                 while len(app_key)!=0:
-#                     region_group_tdict[name].extend(app_key)
-#                     app_key = wp[wp['parent'].isin(app_key)]['term_taxonomy_id'].tolist()
-#                 # if len(app_key)==0:
-#                 #     region_group_tdict.extend([])
-#             else:
-#                 region_group_tdict[name].extend(tracked_regions[key][name])
-
-# tindex_region_dict = vf.invert_dict(region_group_tdict) #map indexes to the wine
-# all_region_tindexes = set([int(val) for values in region_group_tdict.values() for val in values])
-
-# region_pages = {}
-# for region in region_names:
-#     region_pages[region] = set(wp_pageterms[wp_pageterms['term_taxonomy_id'].isin(region_group_tdict[region])&(wp_pageterms['object_id'].notnull())]['object_id'])
-# all_region_pages = sorted(set([int(value) for values in region_pages.values() for value in values]))
 
 
 region_pages, all_region_pages = vf.get_page_indexes('./track_regions.csv', region_term_types, wp_pageterms)
@@ -159,30 +137,6 @@ wine_term_types = {'wbs_master_taxonomy_node_type': wine_wbs,
                     'variety':wine_variety,
                     'review:goodfor':wine_review_goodfor}
 
-# #import wine file with term_taxonomy_ids
-# all_wines = pd.read_csv('./track_wines.csv', header = 0, index_col = 'Group Name')
-# wine_names = sorted(all_wines.index.tolist())
-# all_wines = all_wines.to_dict(orient='series')
-# #Convert values to lists
-# for col in wine_term_types.keys():
-#     all_wines = vf.convert_csv_input(all_wines,col)
-# #Create dictionary with keys = wine type and values as list of indexes we care about
-# #This depends on the input of what kind of tags matter
-# wine_group_tdict = {}
-# for name in wine_names:
-#     wine_group_tdict[name] = []
-#     #Put in a check that at least one is true
-#     for key, val in wine_term_types.items():
-#         if val == True:
-#             wine_group_tdict[name].extend(all_wines[key][name])
-# tindex_wine_dict = vf.invert_dict(wine_group_tdict) #map indexes to the wine
-# all_wine_tindexes = set([int(val) for values in wine_group_tdict.values() for val in values])
-
-# wine_pages = {}
-# for wine in wine_names:
-#     wine_pages[wine] = set(wp_pageterms[wp_pageterms['term_taxonomy_id'].isin(wine_group_tdict[wine])&(wp_pageterms['object_id'].notnull())]['object_id']) #object id is the page idea
-# all_wine_pages = sorted(set([int(value) for values in wine_pages.values() for value in values]))
-
 wine_pages, all_wine_pages = vf.get_page_indexes('./track_wines.csv', wine_term_types, wp_pageterms)                
 wine_names = list(wine_pages.keys())
 index2wine = dict(list((mat_wi,wine_ind) for mat_wi,wine_ind in enumerate(wine_names)))
@@ -202,8 +156,8 @@ print('Mark 3: ', time.time()-start)
 #--------------------CREATE 2D ARRAY TO MARK WHICH WINE GROUPS HAVE WHICH PAGES----------------------------------
 
 #for all pages that reference specific wines, mark which pages reference which wines
-#columns are all the wines
-#rows are pages
+#columns are all the wine group names and rows are pages
+
 wine_type_mat = np.zeros((len(all_wine_pages), len(wine_names)), dtype=np.bool_) # listed as false by default
 index2page = dict(list((mat_pi,pindex) for mat_pi,pindex in enumerate(all_wine_pages)))
 page2index = dict(list((pindex,mat_pi) for mat_pi,pindex in enumerate(all_wine_pages)))
@@ -219,11 +173,16 @@ for wine, pages in wine_pages.items():
 print('Mark 4: ', time.time()-start)
 
 #----------------WEIGHT PAGES BY THE NUMBER OF WINE TYPES IN THE TAGS OF A PAGE---------------------------------
-
+if WEIGHT_SCHEME == 'INV':
 #page weight just evenly divides pages by wines in them then divides and sqaures
 #Ex: if a page tags chardonnay, pinot noir, and cab franc - would be weighted 1/3 for each of these wines
-row_vals = np.nansum(wine_type_mat, axis = 1)    
-page_weights_wine = (wine_type_mat.T/row_vals).T #could square this to skew weighting better?
+    row_vals = np.nansum(wine_type_mat, axis = 1)    
+    page_weights_wine = (wine_type_mat.T/row_vals).T 
+elif WEIGHT_SCHEME=='SQUARE':
+    row_vals = np.nansum(wine_type_mat, axis = 1)    
+    page_weights_wine = (wine_type_mat.T/(row_vals**2)).T 
+else:
+    page_weights_wine = wine_type_mat.copy()
 #pageweights are 0 if no value exists
 
 print('Mark 5: ', time.time()-start)
