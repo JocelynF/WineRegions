@@ -1,0 +1,10 @@
+*.pkl
+*.csv
+*.json
+*.html
+*.LOG
+*.log
+*.pyc
+*.sql
+*.sqldump
+*.tgz
