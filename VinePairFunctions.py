@@ -89,12 +89,14 @@ def get_pageviews(connection, pindex_list, row2page, page2row, type_of_pageviews
     type of pageviews: pageviews or unique_pageviews
     pindex_list: list of pages
     subtract_scroll: false if you want raw pageviews, true if you want to subtract scroll events from pageviews
+    Only selects page views after 2016 to eliminate the weirdness before 2016
     """
     sql_pindex_tup = str(tuple(pindex_list))#",".join(list(str(pindex) for pindex in pindex_list))
     #query for all the pageviews
     sql_sub1 = f"(SELECT MAX(id) as mxid,date,pindex FROM pagedata WHERE `key` = '{type_of_pageviews}' AND pindex in {sql_pindex_tup} GROUP BY date,pindex)"
-    sql_in1 = f"WITH getmax AS {sql_sub1} SELECT pagedata.date,pagedata.pindex,pagedata.count, pagedata.`key` FROM pagedata JOIN getmax ON pagedata.id=getmax.mxid;" 
+    sql_in1 = f"WITH getmax AS {sql_sub1} SELECT pagedata.date,pagedata.pindex,pagedata.count, pagedata.`key` FROM pagedata  JOIN getmax ON pagedata.id=getmax.mxid;" 
     pageviews_df = pd.read_sql(sql_in1, connection, parse_dates={'date': '%Y-%m-%d'})
+    pageviews_df = pageviews_df[pageviews_df['date']>=datetime.datetime(2016,1,1)]
     pageviews_df = pageviews_df.rename(columns={"count": "pageviews_counts"})
 
     #get min and max dates to create an array with each page and date
@@ -107,12 +109,14 @@ def get_pageviews(connection, pindex_list, row2page, page2row, type_of_pageviews
 
     if subtract_scroll == True:
         #get all the scrollevents for the relevent pages
-        sql_sub2 = f"(SELECT MAX(id) as mxid,date,pindex FROM pagedata WHERE `key` = 'scroll_events' AND pindex in {sql_pindex_tup} GROUP BY date,pindex)"
-        sql_in2 = f"WITH getmax AS {sql_sub2} SELECT pagedata.date,pagedata.pindex,pagedata.count, pagedata.`key` FROM pagedata JOIN getmax ON pagedata.id=getmax.mxid;"
+        sql_sub2 = f"(SELECT MAX(id) as mxid,date,pindex FROM pagedata WHERE `key` = 'scroll_events' AND pindex in {sql_pindex_tup}  GROUP BY date,pindex)"
+        sql_in2 = f"WITH getmax AS {sql_sub2} SELECT pagedata.date,pagedata.pindex,pagedata.count, pagedata.`key` FROM pagedata  JOIN getmax ON pagedata.id=getmax.mxid;"
         scroll_events_df = pd.read_sql(sql_in2, connection, parse_dates={'date': '%Y-%m-%d'})
+        scroll_events_df = scroll_events_df[scroll_events_df['date']>datetime.datetime(2016,1,1)]
         scroll_events_df = scroll_events_df.rename(columns={"count": "scroll_counts"})  
         #merge the scroll events into the pageviews dataframe
         pageviews_df = pageviews_df.merge(scroll_events_df, on = ['pindex','date'], how = 'left')
+
         #subtract the scroll events from the page views assuming everything is 0 if a scroll_count is nan
         pageviews_df['net_views'] = pageviews_df['pageviews_counts'].subtract(pageviews_df['scroll_counts'], fill_value=0)
     else:
@@ -144,29 +148,57 @@ def page_outliers(array_to_flag, cutoff = 0.5, sigcut=10,hardcut=5000):
     # log = NullLog()
     # error_handler = np.seterrcall(log)
     # np.seterr(all='log')
-    n_days = array_to_flag.shape[1]
-    row_sum = np.nansum(array_to_flag, axis = 1)
-    row_max = np.nanmax(array_to_flag, axis = 1)
-    row_sum_top = np.subtract(row_sum,row_max) #subtract the max of each row from the sum of each row
-    row_max_2 = row_max*row_max #square the max of each row
-    array_2 = array_to_flag*array_to_flag #square every element
-    row_sum_2 = np.nansum(array_2, axis = 1) #sum the square of each element in a row
-    row_sum2_max2 = np.subtract(row_sum_2, row_max_2) #subtract square of max from sum of squares of each row
-    row_means = row_sum_top/n_days #total minus max value divided by all days
-    row_means_2 = row_means*row_means #mean squared of each row
-    row_var =  np.subtract(row_sum2_max2/n_days, row_means_2)
-    row_std = np.sqrt(row_var)
-    row_sd_max = sigcut*row_std+row_means
+
+    
+    array_to_flag = array_to_flag.copy()
+    #Need accurate date of page creation to calculate mean
+
+    # n_days = np.zeros(len(array_to_flag.shape[0]))
+    # for i in range(len(array_to_flag.shape[0])):
+    #     if index2date[i] > datetime.datetime(2016,1,1):
+    #         dt = max_date-datetime.datetime(2016,1,1)
+    #     else:
+    #         dt = max_date-datetime.datetime(2016,1,1)
+    #     n_days[i] = dt.days
+    #get rid of times before 
+    array_to_flag[np.cumsum(array_to_flag, axis = 1)==0]=np.nan
+    row_means = np.nanmean(array_to_flag, axis = 1)
+    row_std = np.nanstd(array_to_flag, axis = 1)
+    row_sd_max = sigcut*row_std +row_means
+    # row_sum = np.nansum(array_to_flag, axis = 1)
+    # row_max = np.nanmax(array_to_flag, axis = 1)
+    #exclude max from stdev calculation
+    # row_sum_top = np.subtract(row_sum,row_max) #subtract the max of each row from the sum of each row
+    # row_max_2 = row_max*row_max #square the max of each row
+    # array_2 = array_to_flag*array_to_flag #square every element
+    # row_sum_2 = np.nansum(array_2, axis = 1) #sum the square of each element in a row
+    # row_sum2_max2 = np.subtract(row_sum_2, row_max_2) #subtract square of max from sum of squares of each row
+    # row_means = row_sum_top/n_days #total minus max value divided by all days
+    # row_means_2 = row_means*row_means #mean squared of each row
+    # row_var =  np.subtract(row_sum2_max2/n_days, row_means_2)
+    # row_std = np.sqrt(row_var)
+    # row_sd_max = sigcut*row_std+row_means
+    #any points in a row above sigcut*std plus mean is flagged
     horiz_spike = np.greater(array_to_flag, row_sd_max[:,None]) #do I need the ,None?
+    #must also be above the hard cut
     hard_cut = array_to_flag > hardcut
     page_spike = np.logical_and(horiz_spike,hard_cut)
     spike_index = np.nonzero(page_spike)
     si_pairs = zip(list(spike_index[0]),list(spike_index[1]))
     daily_tots = np.nansum(array_to_flag, axis = 0)
+    #replace outlier with the daily max for the group
     daily_max = daily_tots*cutoff
     print("   flagged %i out of %i points as outliers" % (len(spike_index[0]),array_to_flag.shape[1]*array_to_flag.shape[0]))
+    num = 0
     for ri,ci in si_pairs:
-        array_to_flag[ri,ci] = daily_max[ci]
+        #print(array_to_flag[ri,ci])
+        #Need this if statement because without it
+        #the replaced value is sometimes higher than the original outlier
+        if array_to_flag[ri,ci] > daily_max[ci]:
+            num+=1
+            print(ri,ci)
+            array_to_flag[ri,ci] = daily_max[ci]
+    print("   Replaced %i out of %i flagged points" % (num, len(spike_index[0])))
     return page_spike, array_to_flag
 
     # vert_spikes = {}

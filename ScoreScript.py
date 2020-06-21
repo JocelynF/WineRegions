@@ -189,6 +189,12 @@ print('Mark 5: ', time.time()-start)
 
 #------------------AGGREGATE PAGES BY WINE TYPE and PAGE WEIGHTS FOR NET VIEWS AND FILTER OUTLIERS ----------------------------------------------
 
+#May want to do this later to factor in high views on the page creation date
+# page_dates = post_info[post_info['object_id'].isin(all_wine_pages)].loc[:, ['object_id', 'post_date']]
+# post_dates = page_dates.set_index('object_id')['post_date'].to_dict()
+# index2date = dict(list((page2index[p_id],date) for p_id, val in post_dates.items()))
+
+
 wine_pageviews_array, date_list = vf.get_pageviews(vinepair_connect, all_wine_pages, index2page, page2index, 'pageviews', True) #not aggregated
 page_spikes, filtered_pageviews = vf.page_outliers(wine_pageviews_array, cutoff = 0.5, sigcut=5, hardcut=5000) #only filtered in the horizontal direction, not by group
 
@@ -218,29 +224,29 @@ page_creation_dates = {}
 num_pages_subgroup= {}
 for wine_group, w_pages in wine_pages.items():
     #print(wine_group)
-    if wine_group in track_wines:
+    #if wine_group in track_wines:
         #print(wine_group)
-        wine_col = wine2index[wine_group]
-        subgroup_netviews_unfiltered[wine_group] = np.full((len(date_list),len(region_pages.keys())), np.nan)
-        subgroup_netviews_filtered[wine_group] = np.full((len(date_list),len(region_pages.keys())), np.nan)
-        page_creation_dates[wine_group]= {}
-        num_pages_subgroup[wine_group] = np.zeros(len(region_pages.keys()))
-        for region_group, r_pages in region_pages.items():
-            region_col = region2index[region_group]
-            page_weights = page_weights_wine.copy()
-            page_overlaps= w_pages & r_pages #intersection of the two sets
-            creation_dates = post_info[post_info['object_id'].isin(page_overlaps)]['post_date']
-            num_pages_subgroup[wine_group][region_col] = len(page_overlaps)
-            page_creation_dates[wine_group][region_group] = creation_dates
-            logging.info(f"Number of {region_group} & {wine_group} pages: {len(page_overlaps)}")
-            page_indexes = [page2index[page] for page in page_overlaps]
-            mask=np.zeros((page_weights.shape[0],page_weights.shape[1]), dtype=np.bool_)
-            mask[page_indexes,:] = True
-            page_weights = page_weights*mask #only want rows where the pages overlap
-            region_weight_netviews_unfiltered = np.nansum((wine_pageviews_array.T*page_weights[:,wine_col]).T, axis = 0)
-            region_weight_netviews_filtered = np.nansum((filtered_pageviews.T*page_weights[:,wine_col]).T, axis = 0)
-            subgroup_netviews_unfiltered[wine_group][:, region_col] = region_weight_netviews_unfiltered
-            subgroup_netviews_filtered[wine_group][:, region_col] = region_weight_netviews_filtered
+    wine_col = wine2index[wine_group]
+    subgroup_netviews_unfiltered[wine_group] = np.full((len(date_list),len(region_pages.keys())), np.nan)
+    subgroup_netviews_filtered[wine_group] = np.full((len(date_list),len(region_pages.keys())), np.nan)
+    page_creation_dates[wine_group]= {}
+    num_pages_subgroup[wine_group] = np.zeros(len(region_pages.keys()))
+    for region_group, r_pages in region_pages.items():
+        region_col = region2index[region_group]
+        page_weights = page_weights_wine.copy()
+        page_overlaps= w_pages & r_pages #intersection of the two sets
+        creation_dates = post_info[post_info['object_id'].isin(page_overlaps)]['post_date']
+        num_pages_subgroup[wine_group][region_col] = len(page_overlaps)
+        page_creation_dates[wine_group][region_group] = creation_dates
+        logging.info(f"Number of {region_group} & {wine_group} pages: {len(page_overlaps)}")
+        page_indexes = [page2index[page] for page in page_overlaps]
+        mask=np.zeros((page_weights.shape[0],page_weights.shape[1]), dtype=np.bool_)
+        mask[page_indexes,:] = True
+        page_weights = page_weights*mask #only want rows where the pages overlap
+        region_weight_netviews_unfiltered = np.nansum((wine_pageviews_array.T*page_weights[:,wine_col]).T, axis = 0)
+        region_weight_netviews_filtered = np.nansum((filtered_pageviews.T*page_weights[:,wine_col]).T, axis = 0)
+        subgroup_netviews_unfiltered[wine_group][:, region_col] = region_weight_netviews_unfiltered
+        subgroup_netviews_filtered[wine_group][:, region_col] = region_weight_netviews_filtered
 
 
 print('Mark 7: ', time.time()-start)
