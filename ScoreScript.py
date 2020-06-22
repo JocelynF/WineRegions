@@ -8,7 +8,6 @@ import logging
 import json
 import itertools
 import csv
-import pickle
 import os
 ## ------------START USER INPUT -------------------------------
 
