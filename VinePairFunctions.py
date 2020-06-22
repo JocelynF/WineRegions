@@ -153,33 +153,13 @@ def page_outliers(array_to_flag, cutoff = 0.5, sigcut=10,hardcut=5000):
     array_to_flag = array_to_flag.copy()
     #Need accurate date of page creation to calculate mean
 
-    # n_days = np.zeros(len(array_to_flag.shape[0]))
-    # for i in range(len(array_to_flag.shape[0])):
-    #     if index2date[i] > datetime.datetime(2016,1,1):
-    #         dt = max_date-datetime.datetime(2016,1,1)
-    #     else:
-    #         dt = max_date-datetime.datetime(2016,1,1)
-    #     n_days[i] = dt.days
-    #get rid of times before 
     array_to_flag[np.cumsum(array_to_flag, axis = 1)==0]=np.nan
     row_means = np.nanmean(array_to_flag, axis = 1)
     row_std = np.nanstd(array_to_flag, axis = 1)
     row_sd_max = sigcut*row_std +row_means
-    # row_sum = np.nansum(array_to_flag, axis = 1)
-    # row_max = np.nanmax(array_to_flag, axis = 1)
-    #exclude max from stdev calculation
-    # row_sum_top = np.subtract(row_sum,row_max) #subtract the max of each row from the sum of each row
-    # row_max_2 = row_max*row_max #square the max of each row
-    # array_2 = array_to_flag*array_to_flag #square every element
-    # row_sum_2 = np.nansum(array_2, axis = 1) #sum the square of each element in a row
-    # row_sum2_max2 = np.subtract(row_sum_2, row_max_2) #subtract square of max from sum of squares of each row
-    # row_means = row_sum_top/n_days #total minus max value divided by all days
-    # row_means_2 = row_means*row_means #mean squared of each row
-    # row_var =  np.subtract(row_sum2_max2/n_days, row_means_2)
-    # row_std = np.sqrt(row_var)
-    # row_sd_max = sigcut*row_std+row_means
+
     #any points in a row above sigcut*std plus mean is flagged
-    horiz_spike = np.greater(array_to_flag, row_sd_max[:,None]) #do I need the ,None?
+    horiz_spike = np.greater(array_to_flag, row_sd_max[:,None]) 
     #must also be above the hard cut
     hard_cut = array_to_flag > hardcut
     page_spike = np.logical_and(horiz_spike,hard_cut)
