@@ -2,7 +2,7 @@
 
 ## Background
 
-I consulted with the company VinePair to explore trends in wine interest by region (a.k.a. appllation). VinePair is the largest online media company for millennial drinkers. Their main focus is to take the prentension out of drinking and make it more accessible to everybody. They have 3-5 million page views per month so their web traffic data can be used to inform future content and marketing decisions.
+I consulted with a largest online media company targeting millennial drinkers. They have 3-5 million page views per month so their web traffic data can be used to inform future content and marketing decisions.
 
 ## Pipeline
 
@@ -17,6 +17,7 @@ The code uses Python 3.8.3. ScoreScript.py takes in user input and calls VinePai
 * numpy
 * pandas
 * sqlalchemy
+* skleanr
 
 ## Branches
 
