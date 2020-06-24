@@ -120,7 +120,7 @@ def get_pageviews(connection, pindex_list, row2page, page2row, type_of_pageviews
         pageviews_df['net_views'] = pageviews_df['pageviews_counts'].subtract(pageviews_df['scroll_counts'], fill_value=0)
     else:
         #net views are the raw pageviews if we don't subtract scroll events
-        pageviews_df['net_views'] = pageviews_df['pageviews'].copy()
+        pageviews_df['net_views'] = pageviews_df['pageviews_counts'].copy()
 
     netviews_array = np.zeros([len(pindex_list), len(date_list)])
     #group dataframe by the pages

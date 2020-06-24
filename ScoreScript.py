@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 import sqlalchemy as db
 import time
-import VinePairFunctions as vf
+import ScoreFunctions as vf
 import logging
 import json
 import itertools
