@@ -75,13 +75,15 @@ WEIGHT_SCHEME = 'INV' #OR 'SQUARE' OR 'NONE'
 
 #WHAT KIND OF TAXONOMY WOULD YOU LIKE TO INCLUDE
 wine_wbs = True
-wine_post_tag = True
-wine_variety = True
-wine_review_goodfor = True
+wine_post_tag = False
+wine_variety = False
+wine_review_goodfor = False
 
 region_appellation = True 
 region_post_tag = True
 region_wbs = True
+
+SUBTRACT_SCROLL = False
 
 #----------------------END USER INPUT------------------------------------
 start = time.time()
@@ -191,7 +193,7 @@ print('Mark 5: ', time.time()-start)
 # index2date = dict(list((page2index[p_id],date) for p_id, val in post_dates.items()))
 
 
-wine_pageviews_array, date_list = vf.get_pageviews(vinepair_connect, all_wine_pages, index2page, page2index, 'pageviews', True) #not aggregated
+wine_pageviews_array, date_list = vf.get_pageviews(vinepair_connect, all_wine_pages, index2page, page2index, 'pageviews', SUBTRACT_SCROLL) #not aggregated
 page_spikes, filtered_pageviews = vf.page_outliers(wine_pageviews_array, cutoff = 0.5, sigcut=5, hardcut=5000) #only filtered in the horizontal direction, not by group
 
 all_wine_weighted_netviews_unfiltered = np.zeros((len(date_list),len(wine_names)))
