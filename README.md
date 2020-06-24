@@ -2,7 +2,7 @@
 
 ## Background
 
-I consulted with a largest online media company targeting millennial drinkers. They have 3-5 million page views per month so their web traffic data can be used to inform future content and marketing decisions.
+I consulted with a large online media company geared towards millennial drinkers to understand interest in wine type by region. They have 3-5 million page views per month so their web traffic data can be used to inform future content and marketing decisions.
 
 ## Pipeline
 
@@ -17,7 +17,6 @@ The code uses Python 3.8.3. ScoreScript.py takes in user input and calls VinePai
 * numpy
 * pandas
 * sqlalchemy
-* skleanr
 
 ## Branches
 
