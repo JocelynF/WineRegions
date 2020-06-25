@@ -120,6 +120,7 @@ region_term_types = {'appellation': region_appellation, 'post_tag':region_post_t
 
 region_pages, all_region_pages = vf.get_page_indexes('./track_regions.csv', region_term_types, wp_pageterms)
 region_names = list(region_pages.keys())
+region_names.append('NO_LOCATION')
 index2region = dict(list((mat_ri,region_ind) for mat_ri,region_ind in enumerate(region_names)))
 region2index = dict(list((region_ind,mat_ri) for mat_ri,region_ind in enumerate(region_names)))
 
@@ -228,12 +229,15 @@ for wine_group, w_pages in wine_pages.items():
         for region_group, r_pages in region_pages.items():
             region_col = region2index[region_group]
             page_weights = page_weights_wine.copy()
-            page_overlaps= w_pages & r_pages #intersection of the two sets
+            if region_col == 'NO_LOCATION':
+                page_sets = set(all_wine_pages) - set(all_region_pages)
+            else:
+                page_sets= w_pages & r_pages #intersection of the two sets
             #creation_dates = post_info[post_info['object_id'].isin(page_overlaps)]['post_date']
             #num_pages_subgroup[wine_group][region_col] = len(page_overlaps)
             #page_creation_dates[wine_group][region_group] = creation_dates
-            logging.info(f"Number of {region_group} & {wine_group} pages: {len(page_overlaps)}")
-            page_indexes = [page2index[page] for page in page_overlaps]
+            logging.info(f"Number of {region_group} & {wine_group} pages: {len(page_sets)}")
+            page_indexes = [page2index[page] for page in page_sets]
             mask=np.zeros((page_weights.shape[0],page_weights.shape[1]), dtype=np.bool_)
             mask[page_indexes,:] = True
             page_weights = page_weights*mask #only want rows where the pages overlap
