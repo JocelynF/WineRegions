@@ -3,87 +3,18 @@ import pandas as pd
 import datetime
 import sqlalchemy as db
 import time
-import ScoreFunctions as vf
+import ScoreFunctions as sf
 import logging
 import json
 import itertools
 import csv
 import os
+from user_input import *
 ## ------------START USER INPUT -------------------------------
 
 #Where to log info
 #os.remove("RegionalWines.log")
 logging.basicConfig(filename='RegionalWines.log',level=logging.DEBUG)
-
-#THESE NEED TO BE INCLUDED IN THE TRACKED_WINES.CSV FILE
-track_wines = ['CABERNET SAUVIGNON',
-                'CHARDONNAY',
-                'MALBEC',
-                'MERLOT',
-                'MOSCATO',
-                'PINOT GRIGIO/PINOT GRIS',
-                'PINOT NOIR',
-                'RED BLEND',
-                'RIESLING',
-                'ROSE',
-                'SAUVIGNON BLANC',
-                'SHIRAZ/SYRAH']
-
-#THESE NEED TO BE INCLUDED IN THE TRACKED_REGIONS.CSV FILE
-track_countries = ['ARGENTINA',
-                    'AUSTRALIA',
-                    'AUSTRIA',
-                    'CHILE',
-                    'ENGLAND',
-                    'FRANCE',
-                    'GERMANY',
-                    'GREECE',
-                    'ISRAEL',
-                    'ITALY',
-                    'NEW ZEALAND',
-                    'PORTUGAL',
-                    'SOUTH AFRICA',
-                    'SPAIN',
-                    'UNITED STATES']
-
-#THESE NEED TO BE INCLUDED IN THE TRACKED_REGIONS.CSV FILE
-track_regions = ['BEAUJOLAIS',
-                'BORDEAUX',
-                'BURGUNDY',
-                'CALIFORNIA',
-                'COTES DU RHONE',
-                'LOIRE VALLEY',
-                'MONTEPULCIANO',
-                'NEW YORK', 
-                'OREGON',
-                'PIEDMONT',
-                'PROVENCE',
-                'RHONE VALLEY',
-                'RIOJA',
-                'RUEDA', 
-                'SICILY',
-                'TUSCANY',
-                'VIRGINIA',
-                'WASHINGTON', 
-                'SONOMA',
-                'NAPA']
-
-#WEIGHTING_SCHEME (INV OR SQUARE OR NONE) DETERMINES WHETHER A PAGE IS 
-#WEIGHTED BY THE INVERSE NUMBER OF TRACKED TAGS OR THE SQUARE OF THE INVERSE
-# OR NOT WEIGHTED AT ALL
-WEIGHT_SCHEME = 'INV' #OR 'SQUARE' OR 'NONE'
-
-#WHAT KIND OF TAXONOMY WOULD YOU LIKE TO INCLUDE
-wine_wbs = True
-wine_post_tag = False
-wine_variety = False
-wine_review_goodfor = False
-
-region_appellation = True 
-region_post_tag = True
-region_wbs = True
-
-SUBTRACT_SCROLL = False
 
 #----------------------END USER INPUT------------------------------------
 start = time.time()
@@ -112,21 +43,7 @@ wp_pageterms = wp_pageterms.merge(post_info, on = 'object_id', how = 'outer')
 wp_pageterms = wp_pageterms[wp_pageterms['post_slug']!='']
 #print(wp_pageterms.shape)
 print('Mark 1: ', time.time()-start)
-##------------------IMPORTING ALL REGIONS,THEIR PAGES, AND THEIR TAGS-----------------------------------------------
 
-#all_tracked_regions = track_countries.extend(track_regions)
-region_term_types = {'appellation': region_appellation, 'post_tag':region_post_tag}
-
-
-region_pages, all_region_pages = vf.get_page_indexes('./track_regions.csv', region_term_types, wp_pageterms)
-region_names = list(region_pages.keys())
-region_names.append('NO_LOCATION')
-index2region = dict(list((mat_ri,region_ind) for mat_ri,region_ind in enumerate(region_names)))
-region2index = dict(list((region_ind,mat_ri) for mat_ri,region_ind in enumerate(region_names)))
-
-
-
-print('Mark 2: ', time.time()-start)
 
 ##------------------IMPORTING ALL WINES ,THEIR PAGES, AND THEIR TAGS-------------------------------------------------------
 
@@ -136,21 +53,37 @@ wine_term_types = {'wbs_master_taxonomy_node_type': wine_wbs,
                     'variety':wine_variety,
                     'review:goodfor':wine_review_goodfor}
 
-wine_pages, all_wine_pages = vf.get_page_indexes('./track_wines.csv', wine_term_types, wp_pageterms)                
+wine_pages, all_wine_pages = sf.get_page_indexes('./track_wines.csv', wine_term_types, wp_pageterms)                
 wine_names = list(wine_pages.keys())
 index2wine = dict(list((mat_wi,wine_ind) for mat_wi,wine_ind in enumerate(wine_names)))
 wine2index = dict(list((wine_ind,mat_wi) for mat_wi,wine_ind in enumerate(wine_names)))
 
-with open("WinePages.csv", "w") as outfile:
-    writer = csv.writer(outfile)
-    writer.writerow(wine_pages.keys())
-    writer.writerows(itertools.zip_longest(*wine_pages.values()))
 
 for wine in wine_pages:
     l_pages = len(wine_pages[wine])
     logging.info(f"Number of {wine} pages: {l_pages}")
 
+print('Mark 2: ', time.time()-start)
+
+##------------------IMPORTING ALL REGIONS,THEIR PAGES, AND THEIR TAGS-----------------------------------------------
+
+#all_tracked_regions = track_countries.extend(track_regions)
+region_term_types = {'appellation': region_appellation, 'post_tag':region_post_tag}
+
+
+region_pages, all_region_pages = sf.get_page_indexes('./track_regions.csv', region_term_types, wp_pageterms)
+region_pages['NO_LOCATION'] = set(all_wine_pages)-set(all_region_pages)
+region_names = list(region_pages.keys())
+index2region = dict(list((mat_ri,region_ind) for mat_ri,region_ind in enumerate(region_names)))
+region2index = dict(list((region_ind,mat_ri) for mat_ri,region_ind in enumerate(region_names)))
+
+for region in region_pages:
+    l_pages = len(region_pages[region])
+    logging.info(f"Number of {region} pages: {l_pages}")
+
+
 print('Mark 3: ', time.time()-start)
+
 
 #--------------------CREATE 2D ARRAY TO MARK WHICH WINE GROUPS HAVE WHICH PAGES----------------------------------
 
@@ -193,10 +126,23 @@ print('Mark 5: ', time.time()-start)
 # post_dates = page_dates.set_index('object_id')['post_date'].to_dict()
 # index2date = dict(list((page2index[p_id],date) for p_id, val in post_dates.items()))
 
+#wine_pageviews_array: col = dates, row = page
+wine_pageviews_array, date_list = sf.get_pageviews(vinepair_connect, all_wine_pages, index2page, page2index, 'pageviews', SUBTRACT_SCROLL) #not aggregated
+#make beginning nan's if no views yet
+wine_pageviews_array[np.cumsum(wine_pageviews_array, axis = 1)==0]=np.nan
 
-wine_pageviews_array, date_list = vf.get_pageviews(vinepair_connect, all_wine_pages, index2page, page2index, 'pageviews', SUBTRACT_SCROLL) #not aggregated
-page_spikes, filtered_pageviews = vf.page_outliers(wine_pageviews_array, cutoff = 0.5, sigcut=5, hardcut=5000) #only filtered in the horizontal direction, not by group
+if OUTLIER_DETECTION == 'STANDARD':
+    print('Performing Spike Detection')
+    #only filtered in the horizontal direction, not by group
+    page_spikes, filtered_pageviews = sf.page_outliers(wine_pageviews_array, cutoff = CUTOFF, sigcut=SIG_CUT, hardcut=HARDCUT) 
+    print('Mark 6: ', time.time()-start)
 
+elif OUTLIER_DETECTION == 'ISOLATION FOREST':
+    print('Performing Spike Detection')
+    filtered_pageviews = sf.iso_forest_outliers(wine_pageviews_array, OUTLIER_FRACTION)
+    print('Mark 6: ', time.time()-start)
+
+print('Aggregating Page Views by Wine Type')
 all_wine_weighted_netviews_unfiltered = np.zeros((len(date_list),len(wine_names)))
 all_wine_weighted_netviews_filtered = np.zeros((len(date_list),len(wine_names)))
 for col in range(page_weights_wine.shape[1]):
@@ -206,33 +152,31 @@ for col in range(page_weights_wine.shape[1]):
 
 
 
-print('Mark 6: ', time.time()-start)
+print('Mark 7: ', time.time()-start)
 
 #--------------CREATE DICTIONARY OF DICTIONARIES OF WEIGHTED PAGEVIEWS OF WINE BY GROUP AND REGION---------------- 
 logging.info("\n NUMBER OF WINES FOR EACH REGION")
+print('Aggregating Page Views by Region and Calculating Final Score')
 subgroup_netviews_unfiltered = {}
-subgroup_netviews_filtered = {}
 page_creation_dates = {}
 num_pages_subgroup= {}
 subgroup_score_unfiltered = {}
+subgroup_netviews_filtered = {}
 subgroup_score_filtered = {}
 for wine_group, w_pages in wine_pages.items():
     if wine_group in track_wines:
         #print(wine_group)
         wine_col = wine2index[wine_group]
         subgroup_netviews_unfiltered[wine_group] = np.full((len(date_list),len(region_names)), np.nan)
-        subgroup_netviews_filtered[wine_group] = np.full((len(date_list),len(region_names)), np.nan)
         #page_creation_dates[wine_group]= {}
         #num_pages_subgroup[wine_group] = np.zeros(len(region_names))
         subgroup_score_unfiltered[wine_group] = np.full((len(date_list),len(region_names)), np.nan)
+        subgroup_netviews_filtered[wine_group] = np.full((len(date_list),len(region_names)), np.nan)
         subgroup_score_filtered[wine_group] = np.full((len(date_list),len(region_names)), np.nan)
         for region_group, r_pages in region_pages.items():
             region_col = region2index[region_group]
             page_weights = page_weights_wine.copy()
-            if region_col == 'NO_LOCATION':
-                page_sets = set(all_wine_pages) - set(all_region_pages)
-            else:
-                page_sets= w_pages & r_pages #intersection of the two sets
+            page_sets= w_pages & r_pages #intersection of the two sets
             #creation_dates = post_info[post_info['object_id'].isin(page_overlaps)]['post_date']
             #num_pages_subgroup[wine_group][region_col] = len(page_overlaps)
             #page_creation_dates[wine_group][region_group] = creation_dates
@@ -244,11 +188,11 @@ for wine_group, w_pages in wine_pages.items():
             region_weight_netviews_unfiltered = np.nansum((wine_pageviews_array.T*page_weights[:,wine_col]).T, axis = 0)
             region_weight_netviews_filtered = np.nansum((filtered_pageviews.T*page_weights[:,wine_col]).T, axis = 0)
             subgroup_netviews_unfiltered[wine_group][:, region_col] = region_weight_netviews_unfiltered
-            subgroup_netviews_filtered[wine_group][:, region_col] = region_weight_netviews_filtered
             subgroup_score_unfiltered[wine_group][:,region_col] = np.divide(region_weight_netviews_unfiltered,all_wine_weighted_netviews_unfiltered[:,wine_col])
+            subgroup_netviews_filtered[wine_group][:, region_col] = region_weight_netviews_filtered
             subgroup_score_filtered[wine_group][:,region_col] = np.divide(region_weight_netviews_filtered,all_wine_weighted_netviews_filtered[:,wine_col])
 
-print('Mark 7: ', time.time()-start)
+print('Mark 8: ', time.time()-start)
 
 
 #--------------------------------OUTPUT FILES----------------------------------------------------
@@ -265,22 +209,28 @@ wine_column_names = [index2wine[i] for i in range(all_wine_weighted_netviews_unf
 pd.DataFrame(all_wine_weighted_netviews_unfiltered, index = date_list, columns = wine_column_names).to_csv('WeightedWineViews_Unfiltered.csv') 
 pd.DataFrame(all_wine_weighted_netviews_filtered, index = date_list, columns = wine_column_names).to_csv('WeightedWineViews_Filtered.csv') 
 
-#write the pages associated with each region in a file
-# with open("RegionalPages.csv", "w") as outfile:
-#     writer = csv.writer(outfile)
-#     writer.writerow(region_pages.keys())
-#     writer.writerows(itertools.zip_longest(*region_pages.values()))
+
+with open("WinePages.csv", "w") as outfile:
+    writer = csv.writer(outfile)
+    writer.writerow(wine_pages.keys())
+    writer.writerows(itertools.zip_longest(*wine_pages.values()))
+
+with open("RegionalPages.csv", "w") as outfile:
+    writer = csv.writer(outfile)
+    writer.writerow(region_pages.keys())
+    writer.writerows(itertools.zip_longest(*region_pages.values()))
 
 #for each wine that is tracked, create a csv file with the weighted pageviews for each subgroup
 for wine in track_wines:
-    # unfilt = pd.DataFrame.from_dict(subgroup_netviews_unfiltered[wine],orient = 'columns')
-    # unfilt.loc[:,'DATE']=date_list  
-    # w = wine.replace(' ', '').replace('/','')
-    # unfilt.to_csv(f'{w}_UnfiltViews.csv')
+    unfiltview = pd.DataFrame.from_dict(subgroup_netviews_unfiltered[wine],orient = 'columns')
+    unfilt = unfiltview.rename(columns = index2region)
+    unfiltview.loc[:,'DATE']=date_list  
+    w = wine.replace(' ', '').replace('/','')
+    unfiltview.to_csv(f'{w}_UnfiltViews.csv')
 
     filtview = pd.DataFrame.from_dict(subgroup_netviews_filtered[wine],orient = 'columns')
-    filtview.loc[:,'DATE']=date_list
     filtview = filtview.rename(columns=index2region)  
+    filtview.loc[:,'DATE']=date_list
     w = wine.replace(' ', '').replace('/','')
     filtview.to_csv(f'{w}_FiltViews.csv')
 
