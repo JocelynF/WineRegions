@@ -10,6 +10,7 @@ import itertools
 import csv
 import os
 from user_input import *
+import pdb
 ## ------------START USER INPUT -------------------------------
 
 #Where to log info
@@ -41,6 +42,8 @@ wp_pageterms = wp_pageterms.merge(post_info, on = 'object_id', how = 'outer')
 
 #print(wp_pageterms.shape)
 wp_pageterms = wp_pageterms[wp_pageterms['post_slug']!='']
+wp_pageterms = wp_pageterms[wp_pageterms['object_id'].notnull()]
+
 #print(wp_pageterms.shape)
 print('Mark 1: ', time.time()-start)
 
@@ -53,11 +56,16 @@ wine_term_types = {'wbs_master_taxonomy_node_type': wine_wbs,
                     'variety':wine_variety,
                     'review:goodfor':wine_review_goodfor}
 
-wine_pages, all_wine_pages = sf.get_page_indexes('./track_wines.csv', wine_term_types, wp_pageterms)                
+wine_pages, all_winetype_pages = sf.get_page_indexes('./track_wines.csv', wine_term_types, wp_pageterms)                
+#all possible wine pages even ones not labelled with a wine type from the spreadsheed
+#wine_total = wp_pageterms[(wp_pageterms['name'].str.contains('wine', case = False))&(wp_pageterms['taxonomy'].notnull())]
+#wine_total = set(wine_total[(~wine_total['taxonomy'].str.contains('cocktail', case = False))]['object_id'].unique())
+
+wine_total_pages = all_winetype_pages.copy()
+#wine_pages['NO_WINE_TYPE'] = set(wine_total_pages)-set(all_winetype_pages)
 wine_names = list(wine_pages.keys())
 index2wine = dict(list((mat_wi,wine_ind) for mat_wi,wine_ind in enumerate(wine_names)))
 wine2index = dict(list((wine_ind,mat_wi) for mat_wi,wine_ind in enumerate(wine_names)))
-
 
 for wine in wine_pages:
     l_pages = len(wine_pages[wine])
@@ -72,7 +80,7 @@ region_term_types = {'appellation': region_appellation, 'post_tag':region_post_t
 
 
 region_pages, all_region_pages = sf.get_page_indexes('./track_regions.csv', region_term_types, wp_pageterms)
-region_pages['NO_LOCATION'] = set(all_wine_pages)-set(all_region_pages)
+region_pages['NO_LOCATION'] = set(wine_total_pages)-set(all_region_pages)
 region_names = list(region_pages.keys())
 index2region = dict(list((mat_ri,region_ind) for mat_ri,region_ind in enumerate(region_names)))
 region2index = dict(list((region_ind,mat_ri) for mat_ri,region_ind in enumerate(region_names)))
@@ -85,14 +93,16 @@ for region in region_pages:
 print('Mark 3: ', time.time()-start)
 
 
+#pdb.set_trace()
+
 #--------------------CREATE 2D ARRAY TO MARK WHICH WINE GROUPS HAVE WHICH PAGES----------------------------------
 
 #for all pages that reference specific wines, mark which pages reference which wines
 #columns are all the wine group names and rows are pages
 
-wine_type_mat = np.zeros((len(all_wine_pages), len(wine_names)), dtype=np.bool_) # listed as false by default
-index2page = dict(list((mat_pi,pindex) for mat_pi,pindex in enumerate(all_wine_pages)))
-page2index = dict(list((pindex,mat_pi) for mat_pi,pindex in enumerate(all_wine_pages)))
+wine_type_mat = np.zeros((len(wine_total_pages), len(wine_names)), dtype=np.bool_) # listed as false by default
+index2page = dict(list((mat_pi,pindex) for mat_pi,pindex in enumerate(wine_total_pages)))
+page2index = dict(list((pindex,mat_pi) for mat_pi,pindex in enumerate(wine_total_pages)))
 
 
 for wine, pages in wine_pages.items():
@@ -122,12 +132,12 @@ print('Mark 5: ', time.time()-start)
 #------------------AGGREGATE PAGES BY WINE TYPE and PAGE WEIGHTS FOR NET VIEWS AND FILTER OUTLIERS ----------------------------------------------
 
 #May want to do this later to factor in high views on the page creation date
-# page_dates = post_info[post_info['object_id'].isin(all_wine_pages)].loc[:, ['object_id', 'post_date']]
+# page_dates = post_info[post_info['object_id'].isin(wine_total_pages)].loc[:, ['object_id', 'post_date']]
 # post_dates = page_dates.set_index('object_id')['post_date'].to_dict()
 # index2date = dict(list((page2index[p_id],date) for p_id, val in post_dates.items()))
 
 #wine_pageviews_array: col = dates, row = page
-wine_pageviews_array, date_list = sf.get_pageviews(vinepair_connect, all_wine_pages, index2page, page2index, 'pageviews', SUBTRACT_SCROLL) #not aggregated
+wine_pageviews_array, date_list = sf.get_pageviews(vinepair_connect, wine_total_pages, index2page, page2index, 'pageviews', SUBTRACT_SCROLL) #not aggregated
 #make beginning nan's if no views yet
 wine_pageviews_array[np.cumsum(wine_pageviews_array, axis = 1)==0]=np.nan
 
@@ -139,7 +149,7 @@ if OUTLIER_DETECTION == 'STANDARD':
 
 elif OUTLIER_DETECTION == 'ISOLATION FOREST':
     print('Performing Spike Detection')
-    filtered_pageviews = sf.iso_forest_outliers(wine_pageviews_array, OUTLIER_FRACTION)
+    filtered_pageviews = sf.iso_forest_outliers(wine_pageviews_array, OUTLIER_FRACTION, PAGE_LOWER_LIMIT, NUM_DAYS_LOWER_LIMIT)
     print('Mark 6: ', time.time()-start)
 
 print('Aggregating Page Views by Wine Type')
@@ -200,8 +210,8 @@ print('Mark 8: ', time.time()-start)
 
 
 #Output files for pageviews we care about, columns are the page index, and rows are the dates
-pd.DataFrame(wine_pageviews_array.T, columns = all_wine_pages, index = date_list).to_csv('AllPageViews_Unfiltered.csv')
-pd.DataFrame(filtered_pageviews.T, columns = all_wine_pages, index = date_list).to_csv('AllPageViews_Filtered.csv')
+pd.DataFrame(wine_pageviews_array.T, columns = wine_total_pages, index = date_list).to_csv('AllPageViews_Unfiltered.csv')
+pd.DataFrame(filtered_pageviews.T, columns = wine_total_pages, index = date_list).to_csv('AllPageViews_Filtered.csv')
 
 #Output files for the weighted pageviews for the differet wine groups, column is group name, rows are the dates
 #This includes all the wine groups, not just the ones meant to be tracked
@@ -234,10 +244,12 @@ for wine in track_wines:
     w = wine.replace(' ', '').replace('/','')
     filtview.to_csv(f'{w}_FiltViews.csv')
 
-    # unfilt = pd.DataFrame.from_dict(subgroup_score_unfiltered[wine],orient = 'columns')
-    # unfilt.loc[:,'DATE']=date_list  
-    # w = wine.replace(' ', '').replace('/','')
-    # unfilt.to_csv(f'{w}_UnfiltScore.csv')
+    unfiltview = pd.DataFrame.from_dict(subgroup_netviews_unfiltered[wine],orient = 'columns')
+    unfiltview = unfiltview.rename(columns=index2region)  
+    unfiltview.loc[:,'DATE']=date_list
+    w = wine.replace(' ', '').replace('/','')
+    unfiltview.to_csv(f'{w}_FiltViews.csv')
+
 
     #The scores need to be in json files to send to front-end
     filtscore = pd.DataFrame.from_dict(subgroup_score_filtered[wine],orient = 'columns')

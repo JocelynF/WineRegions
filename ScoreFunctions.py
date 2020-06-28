@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 from sklearn.ensemble import IsolationForest
 from sklearn import preprocessing
-
+import pdb
 
 
 def get_page_indexes(all_categories_filename, term_types, wp_pageterms):
@@ -96,7 +96,7 @@ def get_pageviews(connection, pindex_list, row2page, page2row, type_of_pageviews
     sql_pindex_tup = str(tuple(pindex_list))#",".join(list(str(pindex) for pindex in pindex_list))
     #query for all the pageviews
     sql_sub1 = f"(SELECT MAX(id) as mxid,date,pindex FROM pagedata WHERE `key` = '{type_of_pageviews}' AND pindex in {sql_pindex_tup} GROUP BY date,pindex)"
-    sql_in1 = f"WITH getmax AS {sql_sub1} SELECT pagedata.date,pagedata.pindex,pagedata.count, pagedata.`key` FROM pagedata  JOIN getmax ON pagedata.id=getmax.mxid;" 
+    sql_in1 = f"WITH getmax AS {sql_sub1} SELECT pagedata.date,pagedata.pindex,pagedata.count, pagedata.`key` FROM pagedata JOIN getmax ON pagedata.id=getmax.mxid;" 
     pageviews_df = pd.read_sql(sql_in1, connection, parse_dates={'date': '%Y-%m-%d'})
     pageviews_df = pageviews_df[pageviews_df['date']>=datetime.datetime(2016,1,1)]
     pageviews_df = pageviews_df.rename(columns={"count": "pageviews_counts"})
@@ -230,7 +230,7 @@ def iso_forest(input_series, outliers_fraction):
     return full_results
 
 
-def iso_forest_outliers(input_array, outliers_fraction):
+def iso_forest_outliers(input_array, outliers_fraction, PAGE_LOWER_LIMIT=30, NUM_DAYS_LOWER_LIMIT = 60):
     """
     This function runs through all the rows in the array and finds the outliers
     using an Isolation Forest algorithm. 
@@ -244,22 +244,30 @@ def iso_forest_outliers(input_array, outliers_fraction):
     for i in range(outlier_array.shape[0]):
         if ~np.isnan(outlier_array[i,:]).all():
             #only do outlier filtering if at least some of the pageviews are greater than 30
-            condition1 = ~(outlier_array[i,:][~np.isnan(outlier_array[i,:])]<30).all()
-            condition2 = len(outlier_array[i,:][~np.isnan(outlier_array[i,:])])>60
+            condition1 = ~(outlier_array[i,:][~np.isnan(outlier_array[i,:])]<PAGE_LOWER_LIMIT).all()
+            condition2 = len(outlier_array[i,:][~np.isnan(outlier_array[i,:])])>NUM_DAYS_LOWER_LIMIT
             if condition1 and condition2:
+                min_val = 50#np.nanmean(outlier_array[i,:])+np.nanstd(outlier_array[i,:])
                 outlier_mask = iso_forest(outlier_array[i,:], outliers_fraction)
-                masked += len(outlier_mask)
-                for index in np.where(outlier_mask)[0]:
-                    if index==0:
+                #pdb.set_trace()
+                outlier_indexes = np.where(outlier_mask)[0]
+                for index in outlier_indexes:
+                    if (index==0)&(outlier_array[i,index]>min_val):
                         outlier_array[i,index]=np.nan
-                    elif outlier_array[i,index-1]==np.nan:
+                        masked+=1
+                    elif (outlier_array[i,index-1]==np.nan)&(outlier_array[i,index]>min_val):
                         outlier_array[i,index] = np.nan
-                    elif index == (outlier_array.shape[1]-1):
+                        masked+=1
+                    elif (index==(outlier_array.shape[1]-1))&(outlier_array[i,index]>min_val):
                         outlier_array[i, index] = (outlier_array[i,index]+outlier_array[i,index-1])/2
-                    else:
-                        outlier_array[i, index] = (outlier_array[i, index-1]+outlier_array[i,index+1])/2
+                        masked+=1
+                    elif (outlier_array[i,index]>min_val):
+                        next_index = index+1
+                        while (next_index in outlier_indexes)&(next_index<(outlier_array.shape[1]-1)):
+                            next_index+=1
+                        outlier_array[i, index] = (outlier_array[i,index-1]+outlier_array[i,next_index])/2
+                        masked+=1
     #TO DO: also output outlier mask to mark points that were 
-    print(f'Replaced {masked} points using isolation forest out of {outlier_array.size} points.')
     return outlier_array
 
 
