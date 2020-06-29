@@ -10,21 +10,22 @@ import itertools
 import csv
 import os
 from user_input import *
-import pdb
+import my_cred
 ## ------------START USER INPUT -------------------------------
 
 #Where to log info
-#os.remove("RegionalWines.log")
+if os.path.exists("RegionalWines.log"):
+    os.remove("RegionalWines.log")
 logging.basicConfig(filename='RegionalWines.log',level=logging.DEBUG)
 
 #----------------------END USER INPUT------------------------------------
 start = time.time()
 
-sql_connect =  'mysql+pymysql://root:harvey@127.0.0.1:3306/wordpress'
+sql_connect =  my_cred.wordpress_connect
 engine = db.create_engine(sql_connect)#, echo = True)
 wordpress_connect = engine.connect()
 
-sql_connect1  =  'mysql+pymysql://root:harvey@127.0.0.1:3306/vinepair1'
+sql_connect1  =  my_cred.vp_connect
 engine1 = db.create_engine(sql_connect1)#, echo = True)
 vinepair_connect = engine1.connect()
 
@@ -45,7 +46,7 @@ wp_pageterms = wp_pageterms[wp_pageterms['post_slug']!='']
 wp_pageterms = wp_pageterms[wp_pageterms['object_id'].notnull()]
 
 #print(wp_pageterms.shape)
-print('Mark 1: ', time.time()-start)
+print('Finished Importing Page Information: ', round(time.time()-start,2), 'sec')
 
 
 ##------------------IMPORTING ALL WINES ,THEIR PAGES, AND THEIR TAGS-------------------------------------------------------
@@ -71,7 +72,7 @@ for wine in wine_pages:
     l_pages = len(wine_pages[wine])
     logging.info(f"Number of {wine} pages: {l_pages}")
 
-print('Mark 2: ', time.time()-start)
+print('Finished Mapping Wine Pages and Terms: ', round(time.time()-start,2), 'sec')
 
 ##------------------IMPORTING ALL REGIONS,THEIR PAGES, AND THEIR TAGS-----------------------------------------------
 
@@ -90,8 +91,7 @@ for region in region_pages:
     logging.info(f"Number of {region} pages: {l_pages}")
 
 
-print('Mark 3: ', time.time()-start)
-
+print('Finished Mapping Region Pages and Terms: ', round(time.time()-start,2), 'sec')
 
 #pdb.set_trace()
 
@@ -112,7 +112,7 @@ for wine, pages in wine_pages.items():
     wine_type_mat[page_indexes, col] = True
 
 
-print('Mark 4: ', time.time()-start)
+print('Finished Creating Page Term Matrix: ', round(time.time()-start,2), 'sec')
 
 #----------------WEIGHT PAGES BY THE NUMBER OF WINE TYPES IN THE TAGS OF A PAGE---------------------------------
 if WEIGHT_SCHEME == 'INV':
@@ -127,7 +127,7 @@ else:
     page_weights_wine = wine_type_mat.copy()
 #pageweights are 0 if no value exists
 
-print('Mark 5: ', time.time()-start)
+print('Finished Creating Page Weighting Matrix: ', round(time.time()-start,2), 'sec')
 
 #------------------AGGREGATE PAGES BY WINE TYPE and PAGE WEIGHTS FOR NET VIEWS AND FILTER OUTLIERS ----------------------------------------------
 
@@ -145,12 +145,12 @@ if OUTLIER_DETECTION == 'STANDARD':
     print('Performing Spike Detection')
     #only filtered in the horizontal direction, not by group
     page_spikes, filtered_pageviews = sf.page_outliers(wine_pageviews_array, cutoff = CUTOFF, sigcut=SIG_CUT, hardcut=HARDCUT) 
-    print('Mark 6: ', time.time()-start)
+    print('Finished Standard Outlier Detection: ', round(time.time()-start,2), 'sec')
 
 elif OUTLIER_DETECTION == 'ISOLATION FOREST':
     print('Performing Spike Detection')
     filtered_pageviews = sf.iso_forest_outliers(wine_pageviews_array, OUTLIER_FRACTION, PAGE_LOWER_LIMIT, NUM_DAYS_LOWER_LIMIT)
-    print('Mark 6: ', time.time()-start)
+    print('Finished Isolation Forest Outlier Detection: ', round(time.time()-start,2), 'sec')
 
 print('Aggregating Page Views by Wine Type')
 all_wine_weighted_netviews_unfiltered = np.zeros((len(date_list),len(wine_names)))
@@ -162,7 +162,7 @@ for col in range(page_weights_wine.shape[1]):
 
 
 
-print('Mark 7: ', time.time()-start)
+print('Finished Aggregating Pages by Wine Type: ', round(time.time()-start,2), 'sec')
 
 #--------------CREATE DICTIONARY OF DICTIONARIES OF WEIGHTED PAGEVIEWS OF WINE BY GROUP AND REGION---------------- 
 logging.info("\n NUMBER OF WINES FOR EACH REGION")
@@ -202,30 +202,30 @@ for wine_group, w_pages in wine_pages.items():
             subgroup_netviews_filtered[wine_group][:, region_col] = region_weight_netviews_filtered
             subgroup_score_filtered[wine_group][:,region_col] = np.divide(region_weight_netviews_filtered,all_wine_weighted_netviews_filtered[:,wine_col])
 
-print('Mark 8: ', time.time()-start)
+print('Finished Aggregating Pages by Region: ', round(time.time()-start,2), 'sec')
 
 
 #--------------------------------OUTPUT FILES----------------------------------------------------
 
 
-
+print("Outputting Files")
 #Output files for pageviews we care about, columns are the page index, and rows are the dates
-pd.DataFrame(wine_pageviews_array.T, columns = wine_total_pages, index = date_list).to_csv('AllPageViews_Unfiltered.csv')
-pd.DataFrame(filtered_pageviews.T, columns = wine_total_pages, index = date_list).to_csv('AllPageViews_Filtered.csv')
+pd.DataFrame(wine_pageviews_array.T, columns = wine_total_pages, index = date_list).to_csv('Results/AllPageViews_Unfiltered.csv')
+pd.DataFrame(filtered_pageviews.T, columns = wine_total_pages, index = date_list).to_csv('Results/AllPageViews_Filtered.csv')
 
 #Output files for the weighted pageviews for the differet wine groups, column is group name, rows are the dates
 #This includes all the wine groups, not just the ones meant to be tracked
 wine_column_names = [index2wine[i] for i in range(all_wine_weighted_netviews_unfiltered.shape[1])]
-pd.DataFrame(all_wine_weighted_netviews_unfiltered, index = date_list, columns = wine_column_names).to_csv('WeightedWineViews_Unfiltered.csv') 
-pd.DataFrame(all_wine_weighted_netviews_filtered, index = date_list, columns = wine_column_names).to_csv('WeightedWineViews_Filtered.csv') 
+pd.DataFrame(all_wine_weighted_netviews_unfiltered, index = date_list, columns = wine_column_names).to_csv('Results/WeightedWineViews_Unfiltered.csv') 
+pd.DataFrame(all_wine_weighted_netviews_filtered, index = date_list, columns = wine_column_names).to_csv('Results/WeightedWineViews_Filtered.csv') 
 
 
-with open("WinePages.csv", "w") as outfile:
+with open("Results/WinePages.csv", "w") as outfile:
     writer = csv.writer(outfile)
     writer.writerow(wine_pages.keys())
     writer.writerows(itertools.zip_longest(*wine_pages.values()))
 
-with open("RegionalPages.csv", "w") as outfile:
+with open("Results/RegionalPages.csv", "w") as outfile:
     writer = csv.writer(outfile)
     writer.writerow(region_pages.keys())
     writer.writerows(itertools.zip_longest(*region_pages.values()))
@@ -236,19 +236,23 @@ for wine in track_wines:
     unfilt = unfiltview.rename(columns = index2region)
     unfiltview.loc[:,'DATE']=date_list  
     w = wine.replace(' ', '').replace('/','')
-    unfiltview.to_csv(f'{w}_UnfiltViews.csv')
+    unfiltview.to_csv(f'Results/{w}_UnfiltViews.csv')
 
     filtview = pd.DataFrame.from_dict(subgroup_netviews_filtered[wine],orient = 'columns')
     filtview = filtview.rename(columns=index2region)  
     filtview.loc[:,'DATE']=date_list
     w = wine.replace(' ', '').replace('/','')
-    filtview.to_csv(f'{w}_FiltViews.csv')
+    filtview.to_csv(f'Results/{w}_FiltViews.csv')
 
-    unfiltview = pd.DataFrame.from_dict(subgroup_netviews_unfiltered[wine],orient = 'columns')
-    unfiltview = unfiltview.rename(columns=index2region)  
-    unfiltview.loc[:,'DATE']=date_list
+    #The scores need to be in json files to send to front-end
+    unfiltscore = pd.DataFrame.from_dict(subgroup_score_unfiltered[wine],orient = 'columns')
+    unfiltscore.loc[:,'DATE']=date_list
+    unfiltscore = unfiltscore.rename(columns=index2region) 
+    unfiltscore = unfiltscore.set_index('DATE')
+    tojson = unfiltscore.resample('M').mean().reset_index()
+    tojson['DATE'] = tojson['DATE'].dt.strftime('%Y-%m')
     w = wine.replace(' ', '').replace('/','')
-    unfiltview.to_csv(f'{w}_FiltViews.csv')
+    tojson.to_json(f'Scores/{w}_UnfiltScore.json', orient = 'records', indent = 5)
 
 
     #The scores need to be in json files to send to front-end
@@ -259,4 +263,6 @@ for wine in track_wines:
     tojson = filtscore.resample('M').mean().reset_index()
     tojson['DATE'] = tojson['DATE'].dt.strftime('%Y-%m')
     w = wine.replace(' ', '').replace('/','')
-    tojson.to_json(f'{w}_FiltScore.json', orient = 'records', indent = 5)
+    tojson.to_json(f'Scores/{w}_FiltScore.json', orient = 'records', indent = 5)
+
+print ("Job Completed: ", round(time.time()-start, 2), 'sec')

@@ -3,7 +3,6 @@ import pandas as pd
 import datetime
 from sklearn.ensemble import IsolationForest
 from sklearn import preprocessing
-import pdb
 
 
 def get_page_indexes(all_categories_filename, term_types, wp_pageterms):
@@ -203,6 +202,7 @@ def page_outliers(input_array, cutoff = 0.5, sigcut=10,hardcut=5000):
     # print("   flagged %i out of %i points as outliers" % (np.count_nonzero(outlier_subs),outlier_subs.shape[0]*outlier_subs.shape[1]))
     # return out
 
+
 def iso_forest(input_series, outliers_fraction):
     """
     time series anomalies in series are detected using an Isolation Forest algorithm.
@@ -230,7 +230,7 @@ def iso_forest(input_series, outliers_fraction):
     return full_results
 
 
-def iso_forest_outliers(input_array, outliers_fraction, PAGE_LOWER_LIMIT=30, NUM_DAYS_LOWER_LIMIT = 60):
+def iso_forest_outliers(input_array, outliers_fraction=0.003, PAGE_LOWER_LIMIT=30, NUM_DAYS_LOWER_LIMIT = 60):
     """
     This function runs through all the rows in the array and finds the outliers
     using an Isolation Forest algorithm. 
