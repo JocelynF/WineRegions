@@ -198,9 +198,9 @@ for wine_group, w_pages in wine_pages.items():
             region_weight_netviews_unfiltered = np.nansum((wine_pageviews_array.T*page_weights[:,wine_col]).T, axis = 0)
             region_weight_netviews_filtered = np.nansum((filtered_pageviews.T*page_weights[:,wine_col]).T, axis = 0)
             subgroup_netviews_unfiltered[wine_group][:, region_col] = region_weight_netviews_unfiltered
-            subgroup_score_unfiltered[wine_group][:,region_col] = np.divide(region_weight_netviews_unfiltered,all_wine_weighted_netviews_unfiltered[:,wine_col])
+            subgroup_score_unfiltered[wine_group][:,region_col] = 100*np.divide(region_weight_netviews_unfiltered,all_wine_weighted_netviews_unfiltered[:,wine_col])
             subgroup_netviews_filtered[wine_group][:, region_col] = region_weight_netviews_filtered
-            subgroup_score_filtered[wine_group][:,region_col] = np.divide(region_weight_netviews_filtered,all_wine_weighted_netviews_filtered[:,wine_col])
+            subgroup_score_filtered[wine_group][:,region_col] = 100*np.divide(region_weight_netviews_filtered,all_wine_weighted_netviews_filtered[:,wine_col])
 
 print('Finished Aggregating Pages by Region: ', round(time.time()-start,2), 'sec')
 
@@ -233,7 +233,7 @@ with open("Results/RegionalPages.csv", "w") as outfile:
 #for each wine that is tracked, create a csv file with the weighted pageviews for each subgroup
 for wine in track_wines:
     unfiltview = pd.DataFrame.from_dict(subgroup_netviews_unfiltered[wine],orient = 'columns')
-    unfilt = unfiltview.rename(columns = index2region)
+    unfiltview = unfiltview.rename(columns = index2region)
     unfiltview.loc[:,'DATE']=date_list  
     w = wine.replace(' ', '').replace('/','')
     unfiltview.to_csv(f'Results/{w}_UnfiltViews.csv')
