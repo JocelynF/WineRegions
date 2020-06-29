@@ -1,0 +1,11 @@
+*.pkl
+*.csv
+*.json
+*.html
+*.LOG
+*.log
+*.pyc
+*.sql
+*.sqldump
+my_cred.py
+vp_cred.py

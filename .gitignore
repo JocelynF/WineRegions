@@ -1,7 +1,4 @@
-'Testing Page Weights.ipynb'
-'TestingClustering.ipynb'
-'Untitled.ipynb'
-
+*.ipynb
 *.pkl
 *.csv
 *.json

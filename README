@@ -1,0 +1,104 @@
+Files and Folders:
+The WineRegions folder contains the dockerfile and requirements.txt used to
+create the wineregions docker image. The Code folder contains all the
+code. The Scores folder contains the regions score jsons. The Results folder
+contains all of the page view results as csv files. This document is also
+inside WineRegions as a README text file.
+
+Input Files:
+•     track_wines.csv : This includes all the tags associated with each wine
+type grouped by their taxonomy. In the user input file, you can decide which
+columns you want to include.
+•	track_regions.csv : This includes all the tags associated with each
+region grouped by their taxonomy. In the user input file, you can decide which
+columns you want to include.
+
+Code Files:
+•    user_input.py : edit this file before running ScoreScript.py
+•    ScoreFunctions.py : This file contains the functions to create page
+weights, perform outlier detection, and page organizing
+•	 ScoreScript.py  : This is the main file that needs to run in order to
+calculate and output the final Scores
+•	  vp_cred.py : This has the credentials to get into the two mysql
+databases
+
+Code Requirements:
+•    Python 3.8.3
+•    Sqlalchemy
+•    Pandas
+•    Numpy
+•    Sklearn (only if you want outlier detection)
+•    Pymysql
+
+Docker Information:
+I created a docker called WineRegions where python and the packages are
+located in order to avoid issues with version control. It should be able to
+run with any version of Python 3 and the required packages, but I set up the
+docker just in case.
+I have started the docker running using the following command:
+  docker run -v ~/WineRegions:/WineRegions -it wineregions
+If for some reason it stops, you can just type that same command to start it
+up again.
+
+Running the Code:
+To run the ScoreScript manually just enter the following command after editing
+the user_input.py file:
+    docker exec -it wineregions sh -c “cd /WineRegions/Code python
+    ScoreScript.py”
+
+Basic Outline of Calculation:
+I.  Pull data from wordpress database
+
+    A. Need all the term_taxonomy_ids for each page and all the pages for each
+    term_taxonomy_id.
+	It looks like Paul used the term_taxonomy_ids for the Vinepair
+    	database, so that’s what I use as well.
+    B. The Long Island Appellation is changed so that the parent is 4331 (New York)
+    C. Get rid of any pages that have no page slug.
+    D. Using term_taxonomy_id from track_regions.csv and
+    track_wines.csv, pull pages for each wine and region category.
+
+    USER INPUT NOTE: These files have different columns
+    for the different types of tags, these columns can be turned on or off in
+    the user input. For instance, post_tags for wine types is a column but if
+    you make wine_page_tag = False in the user input, those tags will not be
+    used.
+    
+    E. Weight pages based on their importance.
+    USER INPUT NOTE: There are three options the user must
+    choose from. ‘INV’ is the inverse of the number of wines tagged in a
+    page. (i.e. page with Chard and Cab will be ½ pages for Chard and ½ pages
+    for Cab). ‘SQUARE’ is the square of INV, to weight pages with multiple
+    wines tagged even less. (e.g. page with Chard and Cab will be ¼ pages for
+    Chard and 1/4 pages for Cab). ‘NONE’ does not weight the pages.
+
+II. Pull pageviews from Vinepair1 database.
+    	USER INPUT NOTE: User must choose whether or not to subtract scroll
+    events or not. SUBTRACT_SCROLL can be True of False.
+
+III. Perform outlier detection if required to reduce noise from single
+    page outliers.
+     USER INPUT NOTE: There are two options for outlier detection.
+    ‘STANDARD’ refers to a similar method as what Paul implemented
+    in his model. For each page, the mean and std are calculated and a point
+    is flagged if it is SIG_CUT number of standard devs above the mean. It
+    must also be above the HARDCUT number of pages. It must also be above the
+    daily total for all pages times the CUTOFF. If it satisfies these
+    criteria, the point is replaced with daily total for all pages times the
+    CUTOFF.
+    
+    ‘ISOLATION_FOREST’ refers to a machine learning algorithm that looks
+    for points that are isolated from the rest. Pages that have less
+    PAGE_LOWER_LIMIT page views for all time are excluded. Pages that have
+    less than NUM_DAYS_LOWER_LIMIT are excluded. *This model adds about 3
+    minutes to the time depending on how many pages you want to include.*
+
+    Right now it’s set up to always do outlier detection, but both the
+    filtered and unfiltered will be saved in separate files.
+
+IV. Pages are aggregated by wine type according to weighting scheme (above).
+V. Aggregate pages by region and wine type.
+VI. Divide regional wine pages by all wine category pages. (e.g. Chilean
+    Chardonnay divided by All Chardonnay pages.) This is the score.
+VII. Results are output to csv files. Scores are output to json files.
+    
