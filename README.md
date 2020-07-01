@@ -17,7 +17,5 @@ The code uses Python 3.8.3. ScoreScript.py takes in user input and calls VinePai
 * numpy
 * pandas
 * sqlalchemy
+* scikit-learn
 
-## Branches
-
-The master branch includes the finalized code. The testing branch includes code and jupyter notebooks used for testing and plotting. 

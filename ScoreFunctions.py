@@ -247,7 +247,7 @@ def iso_forest_outliers(input_array, outliers_fraction=0.003, PAGE_LOWER_LIMIT=3
             condition1 = ~(outlier_array[i,:][~np.isnan(outlier_array[i,:])]<PAGE_LOWER_LIMIT).all()
             condition2 = len(outlier_array[i,:][~np.isnan(outlier_array[i,:])])>NUM_DAYS_LOWER_LIMIT
             if condition1 and condition2:
-                min_val = 50#np.nanmean(outlier_array[i,:])+np.nanstd(outlier_array[i,:])
+                min_val = 0#50#np.nanmean(outlier_array[i,:])+np.nanstd(outlier_array[i,:])
                 outlier_mask = iso_forest(outlier_array[i,:], outliers_fraction)
                 #pdb.set_trace()
                 outlier_indexes = np.where(outlier_mask)[0]

@@ -137,7 +137,7 @@ print('Finished Creating Page Weighting Matrix: ', round(time.time()-start,2), '
 # index2date = dict(list((page2index[p_id],date) for p_id, val in post_dates.items()))
 
 #wine_pageviews_array: col = dates, row = page
-wine_pageviews_array, date_list = sf.get_pageviews(vinepair_connect, wine_total_pages, index2page, page2index, 'pageviews', SUBTRACT_SCROLL) #not aggregated
+wine_pageviews_array, date_list = sf.get_pageviews(vinepair_connect, wine_total_pages, index2page, page2index, 'uniquePageViews', SUBTRACT_SCROLL) #not aggregated
 #make beginning nan's if no views yet
 wine_pageviews_array[np.cumsum(wine_pageviews_array, axis = 1)==0]=np.nan
 
@@ -211,13 +211,13 @@ print('Finished Aggregating Pages by Region: ', round(time.time()-start,2), 'sec
 print("Outputting Files")
 #Output files for pageviews we care about, columns are the page index, and rows are the dates
 pd.DataFrame(wine_pageviews_array.T, columns = wine_total_pages, index = date_list).to_csv('Results/AllPageViews_Unfiltered.csv')
-pd.DataFrame(filtered_pageviews.T, columns = wine_total_pages, index = date_list).to_csv('Results/AllPageViews_Filtered.csv')
+pd.DataFrame(filtered_pageviews.T, columns = wine_total_pages, index = date_list).to_csv('Results/AllPageViews_Filtered2.csv')
 
 #Output files for the weighted pageviews for the differet wine groups, column is group name, rows are the dates
 #This includes all the wine groups, not just the ones meant to be tracked
 wine_column_names = [index2wine[i] for i in range(all_wine_weighted_netviews_unfiltered.shape[1])]
 pd.DataFrame(all_wine_weighted_netviews_unfiltered, index = date_list, columns = wine_column_names).to_csv('Results/WeightedWineViews_Unfiltered.csv') 
-pd.DataFrame(all_wine_weighted_netviews_filtered, index = date_list, columns = wine_column_names).to_csv('Results/WeightedWineViews_Filtered.csv') 
+pd.DataFrame(all_wine_weighted_netviews_filtered, index = date_list, columns = wine_column_names).to_csv('Results/WeightedWineViews_Filtered2.csv') 
 
 
 with open("Results/WinePages.csv", "w") as outfile:
@@ -242,7 +242,7 @@ for wine in track_wines:
     filtview = filtview.rename(columns=index2region)  
     filtview.loc[:,'DATE']=date_list
     w = wine.replace(' ', '').replace('/','')
-    filtview.to_csv(f'Results/{w}_FiltViews.csv')
+    filtview.to_csv(f'Results/{w}_FiltViews2.csv')
 
     #The scores need to be in json files to send to front-end
     unfiltscore = pd.DataFrame.from_dict(subgroup_score_unfiltered[wine],orient = 'columns')
@@ -263,6 +263,6 @@ for wine in track_wines:
     tojson = filtscore.resample('M').mean().reset_index()
     tojson['DATE'] = tojson['DATE'].dt.strftime('%Y-%m')
     w = wine.replace(' ', '').replace('/','')
-    tojson.to_json(f'Scores/{w}_FiltScore.json', orient = 'records', indent = 5)
+    tojson.to_json(f'Scores/{w}_FiltScore2.json', orient = 'records', indent = 5)
 
 print ("Job Completed: ", round(time.time()-start, 2), 'sec')

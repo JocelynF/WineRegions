@@ -11,7 +11,7 @@ WEIGHT_SCHEME = 'INV' #OR 'SQUARE' OR 'NONE'
 
 #WHAT KIND OF TAXONOMY WOULD YOU LIKE TO INCLUDE
 wine_wbs = True
-wine_post_tag = False
+wine_post_tag = True
 wine_variety = True
 wine_review_goodfor = True
 
@@ -20,7 +20,7 @@ region_post_tag = True
 region_wbs = True
 
 #Subtract scroll events?
-SUBTRACT_SCROLL = True
+SUBTRACT_SCROLL = False
 
 #Options are "STANDARD" or "ISOLATION FOREST"
 #Must choose one of the two, right now it's set up to run both unfiltered and filterd.
@@ -30,7 +30,7 @@ HARDCUT = 5000 #required for "STANDARD"
 CUTOFF = 0.5 #required for "STANDARD"
 PAGE_LOWER_LIMIT = 30 #Required for "ISOLATION FOREST"
 NUM_DAYS_LOWER_LIMIT = 60 #Required for "ISOLATION FOREST"
-OUTLIER_FRACTION = 0.001 #Required for "ISOLATION FOREST"
+OUTLIER_FRACTION = 0.008 #Required for "ISOLATION FOREST"
 
 
 #THESE NEED TO BE INCLUDED IN THE TRACKED_WINES.CSV FILE
