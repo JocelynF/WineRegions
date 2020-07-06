@@ -24,12 +24,16 @@ def get_page_indexes(all_categories_filename, term_types, wp_pageterms):
 
     for i in range(len(names)):
         group_tdict[names[i]] = []
-        #Put in a check that at least one is true
+        #TODO: Put in a check that at least one is true
         for key, val in term_types.items():
+            #e.g. key is term type such as post_tag, and val is whether it's true (included) or not.
             if val == True:
                 if key == 'appellation':
+                    #all_categories3 is dictionary of dictionaries
+                    #app_key is the tags associated with the appelation of the region in question
                     app_key = all_categories3[key][names[i]]              
                     while len(app_key)!=0:
+                        #Get all the children of the appellation
                         group_tdict[names[i]].extend(app_key)
                         app_key = list(set(wp_pageterms[wp_pageterms['parent'].isin(app_key)]['term_taxonomy_id']))
                 else:
@@ -39,14 +43,14 @@ def get_page_indexes(all_categories_filename, term_types, wp_pageterms):
             if (all_categories3['level'][names[i]]<max_level):
                 children = all_categories1[all_categories1['parent']==names[i]].index.tolist()
                 for child in children:
-                    group_tdict[names[i]].extend(all_categories3[key][child])
+                    group_tdict[names[i]].extend(group_tdict[child])
     #tindex_dict = invert_dict(group_tdict) #map indexes to the group
     all_category_tindexes = set([int(val) for values in group_tdict.values() for val in values])
     category_pages_dict = {}
     for name in names:
-        category_pages_dict[name] = set(wp_pageterms[wp_pageterms['term_taxonomy_id'].isin(group_tdict[name])&(wp_pageterms['object_id'].notnull())]['object_id']) #object id is the pages
+        category_pages_dict[name] = set(wp_pageterms[wp_pageterms['term_taxonomy_id'].isin(group_tdict[name])&(wp_pageterms['object_id'].notnull())]['object_id'].astype(int)) #object id is the pages
     all_category_pages = sorted(set([int(value) for values in category_pages_dict.values() for value in values]))
-    return category_pages_dict, all_category_pages
+    return group_tdict, category_pages_dict, all_category_pages
 
 
 def convert_csv_input(df, column):
@@ -269,6 +273,107 @@ def iso_forest_outliers(input_array, outliers_fraction=0.003, PAGE_LOWER_LIMIT=3
                         masked+=1
     #TO DO: also output outlier mask to mark points that were 
     return outlier_array
+
+
+def send_to_files(subregion_name, index2region, date_list, track_wines, sub_views_unfiltered, \
+                sub_scores_unfiltered, sub_views_filtered, sub_scores_filtered):
+
+    for wine in track_wines:
+        unfiltview = pd.DataFrame.from_dict(sub_views_unfiltered[wine],orient = 'columns')
+        unfiltview = unfiltview.rename(columns = index2region)
+        unfiltview.loc[:,'DATE']=date_list  
+        w = wine.replace(' ', '').replace('/','')
+        unfiltview.to_csv(f'Results/{w}_{subregion_name}_UnfiltViews.csv')
+
+        filtview = pd.DataFrame.from_dict(sub_views_filtered[wine],orient = 'columns')
+        filtview = filtview.rename(columns=index2region)  
+        filtview.loc[:,'DATE']=date_list
+        w = wine.replace(' ', '').replace('/','')
+        filtview.to_csv(f'Results/{w}_{subregion_name}_FiltViews.csv')
+
+        #The scores need to be in json files to send to front-end
+        unfiltscore = pd.DataFrame.from_dict(sub_scores_unfiltered[wine],orient = 'columns')
+        unfiltscore.loc[:,'DATE']=date_list
+        unfiltscore = unfiltscore.rename(columns=index2region) 
+        unfiltscore = unfiltscore.set_index('DATE')
+        tojson = unfiltscore.resample('M').mean().reset_index()
+        tojson['DATE'] = tojson['DATE'].dt.strftime('%Y-%m')
+        w = wine.replace(' ', '').replace('/','')
+        tojson.to_json(f'Scores/{w}_{subregion_name}_UnfiltScore.json', orient = 'records', indent = 5)
+
+        #The scores need to be in json files to send to front-end
+        filtscore = pd.DataFrame.from_dict(sub_scores_filtered[wine],orient = 'columns')
+        filtscore.loc[:,'DATE']=date_list
+        filtscore = filtscore.rename(columns=index2region) 
+        filtscore = filtscore.set_index('DATE')
+        tojson = filtscore.resample('M').mean().reset_index()
+        tojson['DATE'] = tojson['DATE'].dt.strftime('%Y-%m')
+        w = wine.replace(' ', '').replace('/','')
+        tojson.to_json(f'Scores/{w}_{subregion_name}_FiltScore.json', orient = 'records', indent = 5)
+
+
+def get_sub_views(subregion_name, subregion_list, region_pages, page2index, wine_pages, \
+                date_list, wine2index, page_weights_wine,wine_pageviews_array, filtered_pageviews, \
+                all_wine_weighted_netviews_unfiltered, all_wine_weighted_netviews_filtered, track_wines):
+
+    #Matrix of Pages for Each Subregion
+    sub_pages = {}
+    if subregion_name == 'COUNTRY':
+        for key in subregion_list:
+            sub_pages[key] = region_pages[key].copy()
+    else:
+        for key in subregion_list:
+            sub_pages[key] = region_pages[key].copy()
+        all_sub_pages = set([int(value) for values in sub_pages.values() for value in values])
+        sub_pages['NO_SUBREGION'] = region_pages[subregion_name] - all_sub_pages
+
+    index2sub= dict(list((mat_si,sub_ind) for mat_si,sub_ind in enumerate(sub_pages.keys())))
+    sub2index = dict(list((sub_ind,mat_si) for mat_si,sub_ind in enumerate(sub_pages.keys())))
+    sub_mat = np.zeros((len(page2index), len(sub_pages.keys())), dtype=np.bool_) # listed as false by default
+    for sub, pages in sub_pages.items():
+        col = sub2index[sub]
+        page_indexes= [page2index[page] for page in pages if page in page2index]
+        #if page has wine in it's tindex it's listed as True
+        sub_mat[page_indexes, col] = True
+
+    #SubRegion Page Weights
+    row_vals = np.nansum(sub_mat, axis = 1)    
+    page_weights_sub= (sub_mat.T/row_vals).T 
+
+    #initiate dictionaries for wine and subgroup
+    sub_views_unfiltered = {}
+    sub_scores_unfiltered = {}
+    sub_views_filtered = {}
+    sub_scores_filtered = {}
+
+    for wine_group, w_pages in wine_pages.items():
+        if wine_group in track_wines:
+            wine_col = wine2index[wine_group]
+            sub_views_unfiltered[wine_group] = np.full((len(date_list),len(sub_pages.keys())), np.nan)
+            sub_scores_unfiltered[wine_group] = np.full((len(date_list),len(sub_pages.keys())), np.nan)
+            sub_views_filtered[wine_group] = np.full((len(date_list),len(sub_pages.keys())), np.nan)
+            sub_scores_filtered[wine_group] = np.full((len(date_list),len(sub_pages.keys())), np.nan)
+            temp_weights = (page_weights_wine[:,col]*page_weights_sub.T).T
+            for sub_group, s_pages in sub_pages.items():
+                sub_col = sub2index[sub_group]
+
+                sub_views_unfiltered[wine_group][:, sub_col] = \
+                np.nansum((wine_pageviews_array.T*temp_weights[:,sub_col]).T, axis = 0).T 
+
+                sub_scores_unfiltered[wine_group][:,sub_col] = \
+                100*sub_views_unfiltered[wine_group][:, sub_col]/all_wine_weighted_netviews_unfiltered[:,wine_col]
+
+                sub_views_filtered[wine_group][:, sub_col] = \
+                np.nansum((filtered_pageviews.T*temp_weights[:,sub_col]).T, axis = 0).T 
+
+                sub_scores_filtered[wine_group][:,sub_col] = \
+                100*sub_views_filtered[wine_group][:, sub_col]/all_wine_weighted_netviews_filtered[:,wine_col]
+
+    send_to_files(subregion_name, index2sub, date_list, track_wines, sub_views_unfiltered, 
+                sub_scores_unfiltered, sub_views_filtered, sub_scores_filtered)
+
+
+    return sub_views_unfiltered, sub_views_unfiltered, sub_views_filtered, sub_scores_filtered
 
 
 
