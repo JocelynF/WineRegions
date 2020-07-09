@@ -11,6 +11,7 @@ import csv
 import os
 from user_input import *
 import my_cred
+import pdb
 ## ------------START USER INPUT -------------------------------
 
 #Where to log info
@@ -151,7 +152,8 @@ elif OUTLIER_DETECTION == 'ISOLATION FOREST':
 print('Aggregating Page Views by Wine Type')
 all_wine_weighted_netviews_unfiltered = np.zeros((len(date_list),len(wine_names)))
 all_wine_weighted_netviews_filtered = np.zeros((len(date_list),len(wine_names)))
-for col in range(page_weights_wine.shape[1]):
+for wine in wine_names:
+    col = wine2index[wine]
     #column is the wine group (e.g. chardonnay, pinot noir), rows are the dates and values are the net pageviews
     all_wine_weighted_netviews_unfiltered[:, col] = np.nansum((wine_pageviews_array.T*page_weights_wine[:,col]).T, axis = 0).T #aggregated
     all_wine_weighted_netviews_filtered[:, col] = np.nansum((filtered_pageviews.T*page_weights_wine[:,col]).T, axis = 0).T #aggregated
@@ -160,93 +162,74 @@ for col in range(page_weights_wine.shape[1]):
 
 print('Finished Aggregating Pages by Wine Type: ', round(time.time()-start,2), 'sec')
 
-#--------------CREATE DICTIONARY OF DICTIONARIES OF WEIGHTED PAGEVIEWS OF WINE BY GROUP FOR SUBREGION---------------- 
+#--------------CREATE DICTIONARY OF DICTIONARIES OF WEIGHTED PAGEVIEWS OF WINE BY GROUP FOR SUBREGION---------------------------- 
 
 
-subregion_name = 'COUNTRY'
-subregion_list = track_countries
-country_views_unfiltered, country_views_unfiltered, country_views_filtered, country_scores_filtered = \
-                sf.get_sub_views(subregion_name, subregion_list, region_pages, page2index, wine_pages, 
-                date_list, wine2index, page_weights_wine,wine_pageviews_array, filtered_pageviews, 
-                all_wine_weighted_netviews_unfiltered, all_wine_weighted_netviews_filtered, track_wines)
+for wine_group in track_wines:
 
+    wine_col = wine2index[wine_group]
+    wine_weights = page_weights_wine[:,wine_col]
+    wine_views_unfiltered = all_wine_weighted_netviews_filtered[:,wine_col]
+    wine_views_filtered = all_wine_weighted_netviews_filtered[:,wine_col]
 
-subregion_name = 'FRANCE'
-subregion_list = france_subregions
-france_views_unfiltered, france_views_unfiltered, france_views_filtered, france_scores_filtered = \
-                sf.get_sub_views(subregion_name, subregion_list, region_pages, page2index, wine_pages, 
-                date_list, wine2index, page_weights_wine,wine_pageviews_array, filtered_pageviews, 
-                all_wine_weighted_netviews_unfiltered, all_wine_weighted_netviews_filtered, track_wines)
+    #Country First:
+    views_unfilt_all, scores_unfilt_all, views_filt_all, scores_filt_all, country2index, all_country_weights= \
+        sf.get_sub_views('COUNTRY', track_countries, region_pages, page2index, \
+        date_list, wine2index, wine_weights,wine_pageviews_array, filtered_pageviews, \
+        wine_views_unfiltered, wine_views_filtered,  None)
 
-subregion_name = 'SPAIN'
-subregion_list = spain_subregions
-spain_views_unfiltered, spain_views_unfiltered, spain_views_filtered, spain_scores_filtered = \
-                sf.get_sub_views(subregion_name, subregion_list, region_pages, page2index, wine_pages, 
-                date_list, wine2index, page_weights_wine,wine_pageviews_array, filtered_pageviews, 
-                all_wine_weighted_netviews_unfiltered, all_wine_weighted_netviews_filtered, track_wines)
+    #subregions next
+    for sub_name in all_regions:
+        subregion_list = all_regions[sub_name]['REGIONS']
+        country = all_regions[sub_name]['PARENT']
+        country_column = country2index[country]
+        country_weights = all_country_weights[:,country_column][:,np.newaxis]
+        views_unfilt_new, scores_unfilt_new, views_filt_new, scores_filt_new, sub2index, page_weights_sub= \
+            sf.get_sub_views(sub_name, subregion_list, region_pages, page2index, \
+            date_list, wine2index, wine_weights,wine_pageviews_array, filtered_pageviews, \
+            wine_views_unfiltered, wine_views_filtered, country_weights)
+        if sub_name == 'UNITED STATES':
+            cali_column = sub2index['CALIFORNIA']
+            california_pageweights = page_weights_sub[:,cali_column][:,np.newaxis]
+        #add to dataframe
+        views_unfilt_all = pd.concat([views_unfilt_all, views_unfilt_new], axis = 1)
+        scores_unfilt_all = pd.concat([scores_unfilt_all, scores_unfilt_new], axis = 1)
+        views_filt_all = pd.concat([views_filt_all, views_filt_new], axis = 1)
+        scores_filt_all = pd.concat([scores_filt_all, scores_filt_new], axis = 1)
 
-subregion_name = 'ITALY'
-subregion_list = italy_subregions
-italy_views_unfiltered, italy_views_unfiltered, italy_views_filtered, italy_scores_filtered = \
-                sf.get_sub_views(subregion_name, subregion_list, region_pages, page2index, wine_pages, 
-                date_list, wine2index, page_weights_wine,wine_pageviews_array, filtered_pageviews, 
-                all_wine_weighted_netviews_unfiltered, all_wine_weighted_netviews_filtered, track_wines)
+    #california last
+    views_unfilt_new, scores_unfilt_new, views_filt_new, scores_filt_new, sub2index, page_weights_sub= \
+        sf.get_sub_views('CALIFORNIA', california_subregions['REGIONS'], region_pages, page2index, \
+        date_list, wine2index, wine_weights,wine_pageviews_array, filtered_pageviews, \
+        wine_views_unfiltered, wine_views_filtered, california_pageweights)
+    #add to dataframe
+    views_unfilt_all = pd.concat([views_unfilt_all, views_unfilt_new], axis = 1)
+    scores_unfilt_all = pd.concat([scores_unfilt_all, scores_unfilt_new], axis = 1)
+    views_filt_all = pd.concat([views_filt_all, views_filt_new], axis = 1)
+    scores_filt_all = pd.concat([scores_filt_all, scores_filt_new], axis = 1)
 
-subregion_name = 'UNITED STATES'
-subregion_list = usa_subregions
-usa_views_unfiltered, usa_views_unfiltered, usa_views_filtered, usa_scores_filtered = \
-                sf.get_sub_views(subregion_name, subregion_list, region_pages, page2index, wine_pages, 
-                date_list, wine2index, page_weights_wine,wine_pageviews_array, filtered_pageviews, 
-                all_wine_weighted_netviews_unfiltered, all_wine_weighted_netviews_filtered, track_wines)
+    w = wine_group.replace(' ', '').replace('/','')
+    views_unfilt_all.to_csv(f'Results/{w}_UnfiltViews.csv')
+    views_filt_all.to_csv(f'Results/{w}_FiltViews.csv')
+    scores_unfilt_all.to_csv(f'Scores/{w}_UnfiltScoreDaily.csv')
+    scores_filt_all.to_csv(f'Scores/{w}_FiltScoreDaily.csv')
 
+    tojson = scores_unfilt_all.resample('M').mean().reset_index()
+    tojson['DATE'] = tojson['DATE'].dt.strftime('%Y-%m')
+    tojson.to_json(f'Scores/{w}_UnfiltScoreMonthly.json', orient = 'records', indent = 5)
 
+    tojson = scores_filt_all.resample('M').mean().reset_index()
+    tojson['DATE'] = tojson['DATE'].dt.strftime('%Y-%m')
+    tojson.to_json(f'Scores/{w}_FiltScoreMonthly.json', orient = 'records', indent = 5)
+        
 
-
-
-# logging.info("\n NUMBER OF WINES FOR EACH REGION")
-# print('Aggregating Page Views by Region and Calculating Final Score')
-# subgroup_netviews_unfiltered = {}
-# page_creation_dates = {}
-# num_pages_subgroup= {}
-# subgroup_score_unfiltered = {}
-# subgroup_netviews_filtered = {}
-# subgroup_score_filtered = {}
-# for wine_group, w_pages in wine_pages.items():
-#     if wine_group in track_wines:
-#         #print(wine_group)
-#         wine_col = wine2index[wine_group]
-#         subgroup_netviews_unfiltered[wine_group] = np.full((len(date_list),len(region_names)), np.nan)
-#         #page_creation_dates[wine_group]= {}
-#         #num_pages_subgroup[wine_group] = np.zeros(len(region_names))
-#         subgroup_score_unfiltered[wine_group] = np.full((len(date_list),len(region_names)), np.nan)
-#         subgroup_netviews_filtered[wine_group] = np.full((len(date_list),len(region_names)), np.nan)
-#         subgroup_score_filtered[wine_group] = np.full((len(date_list),len(region_names)), np.nan)
-#         for region_group, r_pages in region_pages.items():
-#             region_col = region2index[region_group]
-#             page_weights = page_weights_wine.copy()
-#             page_sets= w_pages & r_pages #intersection of the two sets
-#             #creation_dates = post_info[post_info['object_id'].isin(page_overlaps)]['post_date']
-#             #num_pages_subgroup[wine_group][region_col] = len(page_overlaps)
-#             #page_creation_dates[wine_group][region_group] = creation_dates
-#             logging.info(f"Number of {region_group} & {wine_group} pages: {len(page_sets)}")
-#             page_indexes = [page2index[page] for page in page_sets]
-#             mask=np.zeros((page_weights.shape[0],page_weights.shape[1]), dtype=np.bool_)
-#             mask[page_indexes,:] = True
-#             page_weights = page_weights*mask #only want rows where the pages overlap
-#             region_weight_netviews_unfiltered = np.nansum((wine_pageviews_array.T*page_weights[:,wine_col]).T, axis = 0)
-#             region_weight_netviews_filtered = np.nansum((filtered_pageviews.T*page_weights[:,wine_col]).T, axis = 0)
-#             subgroup_netviews_unfiltered[wine_group][:, region_col] = region_weight_netviews_unfiltered
-#             subgroup_score_unfiltered[wine_group][:,region_col] = 100*np.divide(region_weight_netviews_unfiltered,all_wine_weighted_netviews_unfiltered[:,wine_col])
-#             subgroup_netviews_filtered[wine_group][:, region_col] = region_weight_netviews_filtered
-#             subgroup_score_filtered[wine_group][:,region_col] = 100*np.divide(region_weight_netviews_filtered,all_wine_weighted_netviews_filtered[:,wine_col])
-
-# print('Finished Aggregating Pages by Region: ', round(time.time()-start,2), 'sec')
+print('Finished Aggregating Pages by Region: ', round(time.time()-start,2), 'sec')
 
 
 #--------------------------------OUTPUT FILES----------------------------------------------------
 
 
-print("Outputting Files")
+print("Outputting Final Files")
 #Output files for pageviews we care about, columns are the page index, and rows are the dates
 pd.DataFrame(wine_pageviews_array.T, columns = wine_total_pages, index = date_list).to_csv('Results/AllPageViews_Unfiltered.csv')
 pd.DataFrame(filtered_pageviews.T, columns = wine_total_pages, index = date_list).to_csv('Results/AllPageViews_Filtered.csv')
@@ -268,39 +251,5 @@ with open("Results/RegionalPages.csv", "w") as outfile:
     writer.writerow(region_pages.keys())
     writer.writerows(itertools.zip_longest(*region_pages.values()))
 
-#for each wine that is tracked, create a csv file with the weighted pageviews for each subgroup
-# for wine in track_wines:
-#     unfiltview = pd.DataFrame.from_dict(subgroup_netviews_unfiltered[wine],orient = 'columns')
-#     unfiltview = unfiltview.rename(columns = index2region)
-#     unfiltview.loc[:,'DATE']=date_list  
-#     w = wine.replace(' ', '').replace('/','')
-#     unfiltview.to_csv(f'Results/{w}_UnfiltViews.csv')
-
-#     filtview = pd.DataFrame.from_dict(subgroup_netviews_filtered[wine],orient = 'columns')
-#     filtview = filtview.rename(columns=index2region)  
-#     filtview.loc[:,'DATE']=date_list
-#     w = wine.replace(' ', '').replace('/','')
-#     filtview.to_csv(f'Results/{w}_FiltViews.csv')
-
-#     #The scores need to be in json files to send to front-end
-#     unfiltscore = pd.DataFrame.from_dict(subgroup_score_unfiltered[wine],orient = 'columns')
-#     unfiltscore.loc[:,'DATE']=date_list
-#     unfiltscore = unfiltscore.rename(columns=index2region) 
-#     unfiltscore = unfiltscore.set_index('DATE')
-#     tojson = unfiltscore.resample('M').mean().reset_index()
-#     tojson['DATE'] = tojson['DATE'].dt.strftime('%Y-%m')
-#     w = wine.replace(' ', '').replace('/','')
-#     tojson.to_json(f'Scores/{w}_UnfiltScore.json', orient = 'records', indent = 5)
-
-
-#     #The scores need to be in json files to send to front-end
-#     filtscore = pd.DataFrame.from_dict(subgroup_score_filtered[wine],orient = 'columns')
-#     filtscore.loc[:,'DATE']=date_list
-#     filtscore = filtscore.rename(columns=index2region) 
-#     filtscore = filtscore.set_index('DATE')
-#     tojson = filtscore.resample('M').mean().reset_index()
-#     tojson['DATE'] = tojson['DATE'].dt.strftime('%Y-%m')
-#     w = wine.replace(' ', '').replace('/','')
-#     tojson.to_json(f'Scores/{w}_FiltScore.json', orient = 'records', indent = 5)
 
 print ("Job Completed: ", round(time.time()-start, 2), 'sec')

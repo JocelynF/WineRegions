@@ -19,7 +19,7 @@ SUBTRACT_SCROLL = True
 
 #Options are "STANDARD" or "ISOLATION FOREST"
 #Must choose one of the two, right now it's set up to run both unfiltered and filterd.
-OUTLIER_DETECTION = "STANDARD"
+OUTLIER_DETECTION = "ISOLATION FOREST"
 SIG_CUT = 5 # required for "STANDARD"
 HARDCUT = 5000 #required for "STANDARD"
 CUTOFF = 0.5 #required for "STANDARD"
@@ -65,27 +65,38 @@ track_countries.append('NO_LOCATION')
 
 #THESE NEED TO BE INCLUDED IN THE TRACKED_REGIONS.CSV FILE
 
-france_subregions = ['BEAUJOLAIS',
+france_subregions = {'PARENT': 'FRANCE', 'REGIONS':
+                    ['BEAUJOLAIS',
                     'BORDEAUX',
                     'BURGUNDY',
                     'COTES DU RHONE',
                     'LOIRE VALLEY',
                     'PROVENCE',
-                    'RHONE VALLEY']
+                    'RHONE VALLEY']}
 
-italy_subregions = ['MONTEPULCIANO',
+italy_subregions = {'PARENT': 'ITALY', 'REGIONS':
+                    ['MONTEPULCIANO',
                     'PIEDMONT',
                     'SICILY',
-                    'TUSCANY']
+                    'TUSCANY']}
 
-spain_subregions = ['RIOJA',
-                    'RUEDA']
+spain_subregions = {'PARENT':'SPAIN', 'REGIONS':
+                    ['RIOJA',
+                    'RUEDA']}
 
-usa_subregions = ['CALIFORNIA', 
+usa_subregions = {'PARENT': 'UNITED STATES', 'REGIONS':
+                ['CALIFORNIA', 
                   'NEW YORK', 
                   'OREGON', 
                   'VIRGINIA', 
-                  'WASHINGTON']
+                  'WASHINGTON']}
 
-california_subregions = ['SONOMA',
-                        'NAPA']
+california_subregions = {'PARENT': 'CALIFORNIA', 'REGIONS':
+                        ['SONOMA',
+                        'NAPA']}
+
+# subregions = ['FRANCE', 'ITALY', 'SPAIN', 'USA']
+# subsubregions = ['CALIFORNIA']
+
+all_regions = {'FRANCE': france_subregions, 'SPAIN':spain_subregions, \
+            'ITALY': italy_subregions, 'UNITED STATES': usa_subregions}

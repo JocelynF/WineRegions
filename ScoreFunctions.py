@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 from sklearn.ensemble import IsolationForest
 from sklearn import preprocessing
-
+import pdb
 
 def get_page_indexes(all_categories_filename, term_types, wp_pageterms):
     #import file with groups and term_taxonomy_ids in columns
@@ -149,31 +149,28 @@ def page_outliers(input_array, cutoff = 0.5, sigcut=10,hardcut=5000):
 
     Separate function to check outliers with respect to daily values
     """
-    print("Performing Spike Detection")
-    #outlier_subs = np.zeros(array_to_flag.shape)
     # log = NullLog()
     # error_handler = np.seterrcall(log)
     # np.seterr(all='log')
 
-    
     array_to_flag = input_array.copy()
     #Need accurate date of page creation to calculate mean
-
+    #This causes a warning with there is an empty row, but it returns fine. 
     row_means = np.nanmean(array_to_flag, axis = 1)
     row_std = np.nanstd(array_to_flag, axis = 1)
     row_sd_max = sigcut*row_std+row_means
 
     #any points in a row above sigcut*std plus mean is flagged
-    horiz_spike = np.greater(array_to_flag, row_sd_max[:,None]) 
-    #must also be above the hard cut
-    hard_cut = array_to_flag > hardcut
+    with np.errstate(invalid='ignore'): #IMPORTANT: TURN THIS TO 'warn' WHEN TESTING
+        horiz_spike = np.greater(array_to_flag, row_sd_max[:,None]) 
+        hard_cut = np.greater(array_to_flag, hardcut)
     page_spikes = np.logical_and(horiz_spike,hard_cut)
     spike_index = np.nonzero(page_spikes)
     si_pairs = zip(list(spike_index[0]),list(spike_index[1]))
     daily_tots = np.nansum(array_to_flag, axis = 0)
     #replace outlier with the daily max for the group
     daily_max = daily_tots*cutoff
-    print(f'flagged {len(spike_index[0])} out of {array_to_flag.size} points as outliers.')
+    #print(f'flagged {len(spike_index[0])} out of {array_to_flag.size} points as outliers.')
 
     num = 0
     for ri,ci in si_pairs:
@@ -182,9 +179,9 @@ def page_outliers(input_array, cutoff = 0.5, sigcut=10,hardcut=5000):
         #the replaced value is sometimes higher than the original outlier
         if array_to_flag[ri,ci] > daily_max[ci]:
             num+=1
-            print(ri,ci)
+            #print(ri,ci)
             array_to_flag[ri,ci] = daily_max[ci]
-    print("Replaced %i out of %i flagged points" % (num, len(spike_index[0])))
+    #print("Replaced %i out of %i flagged points" % (num, len(spike_index[0])))
 
     return page_spikes, array_to_flag
 
@@ -275,48 +272,39 @@ def iso_forest_outliers(input_array, outliers_fraction=0.003, PAGE_LOWER_LIMIT=3
     return outlier_array
 
 
-def send_to_files(subregion_name, index2region, date_list, track_wines, sub_views_unfiltered, \
+def send_to_pandas(subregion_name, index2region, date_list, sub_views_unfiltered, \
                 sub_scores_unfiltered, sub_views_filtered, sub_scores_filtered):
 
-    for wine in track_wines:
-        unfiltview = pd.DataFrame.from_dict(sub_views_unfiltered[wine],orient = 'columns')
-        unfiltview = unfiltview.rename(columns = index2region)
-        unfiltview.loc[:,'DATE']=date_list  
-        w = wine.replace(' ', '').replace('/','')
-        unfiltview.to_csv(f'Results/{w}_{subregion_name}_UnfiltViews.csv')
+    unfiltview = pd.DataFrame.from_dict(sub_views_unfiltered,orient = 'columns')
+    unfiltview = unfiltview.rename(columns = index2region)
+    unfiltview.loc[:,'DATE']=date_list
+    unfiltview = unfiltview.set_index('DATE')
 
-        filtview = pd.DataFrame.from_dict(sub_views_filtered[wine],orient = 'columns')
-        filtview = filtview.rename(columns=index2region)  
-        filtview.loc[:,'DATE']=date_list
-        w = wine.replace(' ', '').replace('/','')
-        filtview.to_csv(f'Results/{w}_{subregion_name}_FiltViews.csv')
+    filtview = pd.DataFrame.from_dict(sub_views_filtered,orient = 'columns')
+    filtview = filtview.rename(columns=index2region)  
+    filtview.loc[:,'DATE']=date_list
+    filtview = filtview.set_index('DATE')
 
-        #The scores need to be in json files to send to front-end
-        unfiltscore = pd.DataFrame.from_dict(sub_scores_unfiltered[wine],orient = 'columns')
-        unfiltscore.loc[:,'DATE']=date_list
-        unfiltscore = unfiltscore.rename(columns=index2region) 
-        unfiltscore = unfiltscore.set_index('DATE')
-        tojson = unfiltscore.resample('M').mean().reset_index()
-        tojson['DATE'] = tojson['DATE'].dt.strftime('%Y-%m')
-        w = wine.replace(' ', '').replace('/','')
-        tojson.to_json(f'Scores/{w}_{subregion_name}_UnfiltScore.json', orient = 'records', indent = 5)
+    #The scores need to be in json files to send to front-end
+    unfiltscore = pd.DataFrame.from_dict(sub_scores_unfiltered,orient = 'columns')
+    unfiltscore.loc[:,'DATE']=date_list
+    unfiltscore = unfiltscore.rename(columns=index2region) 
+    unfiltscore = unfiltscore.set_index('DATE')
 
-        #The scores need to be in json files to send to front-end
-        filtscore = pd.DataFrame.from_dict(sub_scores_filtered[wine],orient = 'columns')
-        filtscore.loc[:,'DATE']=date_list
-        filtscore = filtscore.rename(columns=index2region) 
-        filtscore = filtscore.set_index('DATE')
-        tojson = filtscore.resample('M').mean().reset_index()
-        tojson['DATE'] = tojson['DATE'].dt.strftime('%Y-%m')
-        w = wine.replace(' ', '').replace('/','')
-        tojson.to_json(f'Scores/{w}_{subregion_name}_FiltScore.json', orient = 'records', indent = 5)
+    #The scores need to be in json files to send to front-end
+    filtscore = pd.DataFrame.from_dict(sub_scores_filtered,orient = 'columns')
+    filtscore.loc[:,'DATE']=date_list
+    filtscore = filtscore.rename(columns=index2region) 
+    filtscore = filtscore.set_index('DATE')
 
+    return unfiltview, unfiltscore, filtview, filtscore
 
-def get_sub_views(subregion_name, subregion_list, region_pages, page2index, wine_pages, \
-                date_list, wine2index, page_weights_wine,wine_pageviews_array, filtered_pageviews, \
-                all_wine_weighted_netviews_unfiltered, all_wine_weighted_netviews_filtered, track_wines):
+def get_sub_views(subregion_name, subregion_list, region_pages, page2index, date_list,\
+                wine2index, wine_weights,wine_pageviews_array, filtered_pageviews, \
+                wine_views_unfiltered, wine_views_filtered, parent_weights = None):
 
     #Matrix of Pages for Each Subregion
+
     sub_pages = {}
     if subregion_name == 'COUNTRY':
         for key in subregion_list:
@@ -327,53 +315,51 @@ def get_sub_views(subregion_name, subregion_list, region_pages, page2index, wine
         all_sub_pages = set([int(value) for values in sub_pages.values() for value in values])
         sub_pages['NO_SUBREGION'] = region_pages[subregion_name] - all_sub_pages
 
-    index2sub= dict(list((mat_si,sub_ind) for mat_si,sub_ind in enumerate(sub_pages.keys())))
+    index2sub= dict(list((mat_si,f'{subregion_name}_{sub_ind}') for mat_si, sub_ind in enumerate(sub_pages.keys())))
     sub2index = dict(list((sub_ind,mat_si) for mat_si,sub_ind in enumerate(sub_pages.keys())))
-    sub_mat = np.zeros((len(page2index), len(sub_pages.keys())), dtype=np.bool_) # listed as false by default
+    sub_mat = np.zeros((len(page2index), len(index2sub)), dtype=np.bool_) # listed as false by default
     for sub, pages in sub_pages.items():
         col = sub2index[sub]
         page_indexes= [page2index[page] for page in pages if page in page2index]
-        #if page has wine in it's tindex it's listed as True
+        #if page has region in it's tindex it's listed as True
         sub_mat[page_indexes, col] = True
 
     #SubRegion Page Weights
-    row_vals = np.nansum(sub_mat, axis = 1)    
-    page_weights_sub= (sub_mat.T/row_vals).T 
+    with np.errstate(invalid='ignore'): #IMPORTANT: TURN THIS TO 'warn' WHEN TESTING
+        row_vals = np.nansum(sub_mat, axis = 1)    
+        page_weights_sub= (sub_mat.T/row_vals).T 
 
-    #initiate dictionaries for wine and subgroup
-    sub_views_unfiltered = {}
-    sub_scores_unfiltered = {}
-    sub_views_filtered = {}
-    sub_scores_filtered = {}
+    if parent_weights is not None: 
+        page_weights_sub = page_weights_sub*parent_weights
+    
 
-    for wine_group, w_pages in wine_pages.items():
-        if wine_group in track_wines:
-            wine_col = wine2index[wine_group]
-            sub_views_unfiltered[wine_group] = np.full((len(date_list),len(sub_pages.keys())), np.nan)
-            sub_scores_unfiltered[wine_group] = np.full((len(date_list),len(sub_pages.keys())), np.nan)
-            sub_views_filtered[wine_group] = np.full((len(date_list),len(sub_pages.keys())), np.nan)
-            sub_scores_filtered[wine_group] = np.full((len(date_list),len(sub_pages.keys())), np.nan)
-            temp_weights = (page_weights_wine[:,col]*page_weights_sub.T).T
-            for sub_group, s_pages in sub_pages.items():
-                sub_col = sub2index[sub_group]
+    sub_views_unfiltered = np.full((len(date_list),len(sub_pages.keys())), np.nan)
+    sub_scores_unfiltered = np.full((len(date_list),len(sub_pages.keys())), np.nan)
+    sub_views_filtered = np.full((len(date_list),len(sub_pages.keys())), np.nan)
+    sub_scores_filtered = np.full((len(date_list),len(sub_pages.keys())), np.nan)
+    temp_weights = (wine_weights*page_weights_sub.T).T
+    for sub_group, s_pages in sub_pages.items():
+        with np.errstate(invalid='ignore'): #IMPORTANT: TURN THIS TO 'warn' WHEN TESTING
+            sub_col = sub2index[sub_group]
 
-                sub_views_unfiltered[wine_group][:, sub_col] = \
-                np.nansum((wine_pageviews_array.T*temp_weights[:,sub_col]).T, axis = 0).T 
+            sub_views_unfiltered[:, sub_col] = \
+            np.nansum((wine_pageviews_array.T*temp_weights[:,sub_col]).T, axis = 0).T 
 
-                sub_scores_unfiltered[wine_group][:,sub_col] = \
-                100*sub_views_unfiltered[wine_group][:, sub_col]/all_wine_weighted_netviews_unfiltered[:,wine_col]
+            sub_scores_unfiltered[:,sub_col] = \
+            100*sub_views_unfiltered[:, sub_col]/wine_views_unfiltered
 
-                sub_views_filtered[wine_group][:, sub_col] = \
-                np.nansum((filtered_pageviews.T*temp_weights[:,sub_col]).T, axis = 0).T 
+            sub_views_filtered[:, sub_col] = \
+            np.nansum((filtered_pageviews.T*temp_weights[:,sub_col]).T, axis = 0).T 
 
-                sub_scores_filtered[wine_group][:,sub_col] = \
-                100*sub_views_filtered[wine_group][:, sub_col]/all_wine_weighted_netviews_filtered[:,wine_col]
+            sub_scores_filtered[:,sub_col] = \
+            100*sub_views_filtered[:, sub_col]/wine_views_filtered
 
-    send_to_files(subregion_name, index2sub, date_list, track_wines, sub_views_unfiltered, 
-                sub_scores_unfiltered, sub_views_filtered, sub_scores_filtered)
+    sub_views_unfiltered, sub_scores_unfiltered, sub_views_filtered, sub_scores_filtered = send_to_pandas( \
+                    subregion_name, index2sub, date_list, sub_views_unfiltered, \
+                    sub_scores_unfiltered, sub_views_filtered, sub_scores_filtered)
 
 
-    return sub_views_unfiltered, sub_views_unfiltered, sub_views_filtered, sub_scores_filtered
+    return sub_views_unfiltered, sub_scores_unfiltered, sub_views_filtered, sub_scores_filtered, sub2index, page_weights_sub
 
 
 
