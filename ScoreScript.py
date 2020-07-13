@@ -134,7 +134,7 @@ print('Finished Creating Page Weighting Matrix: ', round(time.time()-start,2), '
 # index2date = dict(list((page2index[p_id],date) for p_id, val in post_dates.items()))
 
 #wine_pageviews_array: col = dates, row = page
-wine_pageviews_array, date_list = sf.get_pageviews(vinepair_connect, wine_total_pages, index2page, page2index, 'pageviews', SUBTRACT_SCROLL) #not aggregated
+wine_pageviews_array, date_list = sf.get_pageviews(vinepair_connect, wine_total_pages, index2page, page2index, VIEWTYPE, SUBTRACT_SCROLL) #not aggregated
 #make beginning nan's if no views yet
 wine_pageviews_array[np.cumsum(wine_pageviews_array, axis = 1)==0]=np.nan
 
@@ -169,13 +169,13 @@ for wine_group in track_wines:
 
     wine_col = wine2index[wine_group]
     wine_weights = page_weights_wine[:,wine_col]
-    wine_views_unfiltered = all_wine_weighted_netviews_filtered[:,wine_col]
+    wine_views_unfiltered = all_wine_weighted_netviews_unfiltered[:,wine_col]
     wine_views_filtered = all_wine_weighted_netviews_filtered[:,wine_col]
 
     #Country First:
     views_unfilt_all, scores_unfilt_all, views_filt_all, scores_filt_all, country2index, all_country_weights= \
         sf.get_sub_views('COUNTRY', track_countries, region_pages, page2index, \
-        date_list, wine2index, wine_weights,wine_pageviews_array, filtered_pageviews, \
+        date_list, wine2index, wine_weights, wine_pageviews_array, filtered_pageviews, \
         wine_views_unfiltered, wine_views_filtered,  None)
 
     #subregions next

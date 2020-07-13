@@ -6,7 +6,7 @@ This file contains all of the information that needs to be input for the code to
 
 #WHAT KIND OF TAXONOMY WOULD YOU LIKE TO INCLUDE
 wine_wbs = True
-wine_post_tag = False
+wine_post_tag = True
 wine_variety = True
 wine_review_goodfor = True
 
@@ -15,7 +15,8 @@ region_post_tag = True
 region_wbs = True
 
 #Subtract scroll events?
-SUBTRACT_SCROLL = True
+SUBTRACT_SCROLL = False
+VIEWTYPE = 'uniquePageviews' #other option is 'uniquePageviews'
 
 #Options are "STANDARD" or "ISOLATION FOREST"
 #Must choose one of the two, right now it's set up to run both unfiltered and filterd.
